@@ -1,11 +1,11 @@
-name: Log occupancy
+name: Log occupancy :20/:50
 
 # Runs off-machine, so coverage survives the Mac being asleep or off.
 # GitHub's scheduler is best-effort and often runs a few minutes late; this is
 # a reliability floor under the 10-minute local launchd job, not a replacement.
 on:
   schedule:
-    - cron: '*/30 * * * *'   # every 30 min (UTC); ~1,490 runner-min/month
+    - cron: '20,50 * * * *'   # twenty past and ten to (UTC)
   workflow_dispatch:          # allows a manual run from the Actions tab
 
 permissions:
