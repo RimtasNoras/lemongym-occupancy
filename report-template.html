@@ -11,6 +11,7 @@
     --axis:           #c3c2b7;
     --border:         rgba(11,11,11,0.10);
     --series-1:       #2a78d6;
+    --estimate:       #e34948;
     --night:          rgba(11,11,11,0.035);
   }
   @media (prefers-color-scheme: dark) {
@@ -25,6 +26,7 @@
       --axis:           #383835;
       --border:         rgba(255,255,255,0.10);
       --series-1:       #3987e5;
+      --estimate:       #e66767;
       --night:          rgba(255,255,255,0.045);
     }
   }
@@ -39,6 +41,7 @@
     --axis:           #383835;
     --border:         rgba(255,255,255,0.10);
     --series-1:       #3987e5;
+    --estimate:       #e66767;
     --night:          rgba(255,255,255,0.045);
   }
 
@@ -89,6 +92,18 @@
   .anno-sub { fill: var(--text-secondary); font-size: 10.5px; }
   .band-label { fill: var(--text-muted); font-size: 10.5px; letter-spacing: 0.04em; }
   .bar { fill: var(--series-1); }
+  .estimate-line {
+    fill: none; stroke: var(--estimate); stroke-width: 2;
+    stroke-dasharray: 6 4; stroke-linejoin: round; stroke-linecap: round;
+  }
+  .legend {
+    display: flex; gap: 18px; flex-wrap: wrap;
+    font-size: 0.78rem; color: var(--text-secondary); margin: 0 0 10px;
+  }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .legend i { width: 22px; height: 0; border-top-width: 2px; display: inline-block; }
+  .legend .m { border-top-style: solid;  border-top-color: var(--series-1); }
+  .legend .e { border-top-style: dashed; border-top-color: var(--estimate); }
   .crosshair { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
 
   .tip {
@@ -134,6 +149,10 @@
   <figure class="card">
     <h2 id="ch1title">Every reading</h2>
     <p class="note">Hover for exact values. Shaded region marks 23:00&ndash;06:00.</p>
+    <p class="legend">
+      <span><i class="m"></i>Measured</span>
+      <span><i class="e"></i>Estimated &mdash; logger was down, not recorded</span>
+    </p>
     <div class="chart-scroll"><div class="plot-host" id="host1"><div class="tip" id="tip1"></div></div></div>
   </figure>
 
@@ -152,8 +171,11 @@
   </details>
 
   <footer>
-    Source: lemongym.lt club-occupancy feed, sampled on a local 10-minute schedule.
-    A reading is recorded only when the fetch succeeds &mdash; failed fetches leave a gap rather than a guessed value.
+    Source: lemongym.lt club-occupancy feed, sampled on a 10-minute schedule (local launchd job plus off-machine GitHub Actions).
+    A reading is recorded only when the fetch succeeds, so <b>occupancy.csv contains measurements only</b> &mdash; never a guessed value.
+    The dashed red line is drawn at render time to fill logger outages: each missing point is modelled from the average shape of the
+    same time of day on days that were measured, offset to meet the real readings at both ends. It is an illustration of the likely
+    shape, not data, and is not saved anywhere.
   </footer>
 </div>
 
@@ -265,6 +287,11 @@ document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
     const seg = r.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ')
       + ` L ${x(r[r.length-1].m).toFixed(1)} ${y(0)} L ${x(r[0].m).toFixed(1)} ${y(0)} Z`;
     svg.appendChild(el('path', {d: seg, fill:'url(#g1)'}));
+  });
+  (DATA.estimates || []).forEach(seg => {
+    const sd = seg.pts.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
+    svg.appendChild(el('path', {d: sd, class:'estimate-line',
+      'vector-effect':'non-scaling-stroke'}));
   });
   svg.appendChild(el('path', {d, class:'series-line', 'vector-effect':'non-scaling-stroke'}));
 

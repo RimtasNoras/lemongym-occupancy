@@ -33,7 +33,54 @@ for p in points:
 hourly = [{'m': k, 'avg': round(sum(v) / len(v), 1), 'n': len(v),
            'min': min(v), 'max': max(v)} for k, v in sorted(buckets.items())]
 
-data = json.dumps({'points': points, 'hourly': hourly}, separators=(',', ':'))
+# ---- estimated fill for logger outages -------------------------------------
+# Displayed as a dashed red line and NEVER written to occupancy.csv: the CSV
+# stays measurement-only. Each gap is filled from the average shape of the same
+# time-of-day on days we did measure, then offset linearly so the estimate
+# meets the real readings at both ends instead of stepping at the joins.
+SLOT = 10                      # minutes per estimated sample
+GAP_MIN = 20                   # gaps longer than this get an estimate
+
+profile = collections.defaultdict(list)
+for pt in points:
+    profile[pt['m'] % 1440 // SLOT * SLOT].append(pt['v'])
+profile = {k: sum(v) / len(v) for k, v in profile.items()}
+
+def shape(minute_of_day):
+    """Typical value at this time of day, or None if never observed."""
+    k = minute_of_day % 1440 // SLOT * SLOT
+    for d in range(0, 1440, SLOT):                 # nearest observed slot
+        for c in (k - d, k + d):
+            v = profile.get(c % 1440)
+            if v is not None:
+                return v
+    return None
+
+segments = []
+for a, b in zip(points, points[1:]):
+    span = b['m'] - a['m']
+    if span <= GAP_MIN:
+        continue
+    inner = list(range(a['m'] + SLOT, b['m'], SLOT))
+    if not inner:
+        continue
+    sa, sb = shape(a['m']), shape(b['m'])
+    seg = [{'m': a['m'], 'v': a['v'], 'real': True}]
+    for m in inner:
+        base = shape(m)
+        if base is None or sa is None or sb is None:
+            f = (m - a['m']) / span                # nothing to model on
+            est = a['v'] + (b['v'] - a['v']) * f
+        else:
+            f = (m - a['m']) / span                # blend the endpoint offsets
+            corr = (a['v'] - sa) * (1 - f) + (b['v'] - sb) * f
+            est = base + corr
+        seg.append({'m': m, 'v': max(0, round(est, 1))})
+    seg.append({'m': b['m'], 'v': b['v'], 'real': True})
+    segments.append({'pts': seg, 'mins': span})
+
+data = json.dumps({'points': points, 'hourly': hourly, 'estimates': segments},
+                  separators=(',', ':'))
 
 tpl = open(os.path.join(HERE, 'report-template.html')).read()
 assert '__DATA__' in tpl, 'template lost its __DATA__ placeholder'
