@@ -7,13 +7,16 @@ needs editing as readings accumulate.
 
 Usage: python3 build-report.py
 """
-import csv, json, collections, os
+import csv, json, collections, datetime, os
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 rows = list(csv.DictReader(open(os.path.join(HERE, 'occupancy.csv'))))
 dates = sorted({r['date'] for r in rows})
-day_index = {d: i for i, d in enumerate(dates)}
+# Days since the first reading -- NOT a dense 0,1,2 index. A day with no
+# readings (logger down) must stay a real gap on the axis, not be collapsed.
+_d0 = datetime.date.fromisoformat(dates[0])
+day_index = {d: (datetime.date.fromisoformat(d) - _d0).days for d in dates}
 
 points = []
 for r in rows:

@@ -247,8 +247,25 @@ document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
     t.textContent = s.label; svg.appendChild(t);
   });
 
-  const d = P.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
-  svg.appendChild(el('path', {d: d + ` L ${x(M1).toFixed(1)} ${y(0)} L ${x(M0).toFixed(1)} ${y(0)} Z`, fill:'url(#g1)'}));
+  /* Break the stroke wherever readings stop for more than 45 min: a straight
+     line across a logger outage would read as measured data, which it is not. */
+  const GAP = 45;
+  const d = P.map((p,i) =>
+    ((i === 0 || p.m - P[i-1].m > GAP) ? 'M' : 'L') +
+    x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
+  /* One closed area per contiguous run, so gaps stay empty under the curve. */
+  let run = [];
+  const runs = [];
+  P.forEach((p,i) => {
+    if (i > 0 && p.m - P[i-1].m > GAP) { runs.push(run); run = []; }
+    run.push(p);
+  });
+  runs.push(run);
+  runs.filter(r => r.length > 1).forEach(r => {
+    const seg = r.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ')
+      + ` L ${x(r[r.length-1].m).toFixed(1)} ${y(0)} L ${x(r[0].m).toFixed(1)} ${y(0)} Z`;
+    svg.appendChild(el('path', {d: seg, fill:'url(#g1)'}));
+  });
   svg.appendChild(el('path', {d, class:'series-line', 'vector-effect':'non-scaling-stroke'}));
 
   /* selective direct labels only: the peak and the floor */
@@ -291,7 +308,12 @@ document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
 (function () {
   const W=1000, H=250, ML=44, MR=18, MT=18, MB=40;
   const YMAX = Math.max(10, Math.ceil((peak.v + 6) / 10) * 10);
-  const n = HR.length, bw = (W - ML - MR) / n;
+  /* Position bars by real elapsed hour, not array index: hours with no
+     readings must stay blank, matching the gaps shown in the timeline above. */
+  const H0 = HR[0].m, H1 = HR[HR.length-1].m;
+  const slots = (H1 - H0) / 60 + 1;
+  const n = HR.length, bw = (W - ML - MR) / slots;
+  const slotOf = h => (h.m - H0) / 60;
   const y = v => MT + (1 - v / YMAX) * (H - MT - MB);
 
   const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img',
@@ -304,9 +326,10 @@ document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
     t.textContent = v + '%'; svg.appendChild(t);
   }
 
-  const labelEvery = n > 16 ? 2 : 1;
-  HR.forEach((h,i) => {
-    const bx = ML + i*bw + 1, w = bw - 2;              /* 2px surface gap */
+  const labelEvery = slots > 32 ? 4 : slots > 16 ? 2 : 1;
+  HR.forEach(h => {
+    const i = slotOf(h);
+    const bx = ML + i*bw + 1, w = Math.max(bw - 2, 1);   /* 2px surface gap */
     svg.appendChild(el('rect', {x:bx, y:y(h.avg), width:w,
       height:Math.max(y(0)-y(h.avg), 2), rx:4, class:'bar'}));
     if (i % labelEvery === 0) {
@@ -320,10 +343,10 @@ document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
   svg.addEventListener('mousemove', ev => {
     const r = svg.getBoundingClientRect();
     const i = Math.floor(((ev.clientX - r.left) / r.width * W - ML) / bw);
-    if (i < 0 || i >= n) { tip.style.opacity = 0; return; }
-    const h = HR[i];
+    const h = HR.find(x => slotOf(x) === i);
+    if (i < 0 || i >= slots || !h) { tip.style.opacity = 0; return; }
     tip.innerHTML = `<div class="tv">${h.avg}%</div><div class="tt">${fmtH(h.m)} &middot; ${h.n} readings &middot; ${h.min}–${h.max}%</div>`;
-    const px = (ML + i*bw + bw/2) / W * r.width;
+    const px = (ML + slotOf(h)*bw + bw/2) / W * r.width;
     tip.style.left = Math.min(Math.max(px - 70, 0), r.width - 168) + 'px';
     tip.style.top = (y(h.avg) / H * r.height - 56) + 'px';
     tip.style.opacity = 1;
