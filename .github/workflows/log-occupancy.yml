@@ -26,13 +26,15 @@ jobs:
 
       - name: Commit if changed
         run: |
-          if git diff --quiet -- occupancy-cloud.csv; then
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          # Stage first: git diff alone never reports an untracked file, so a
+          # newly created CSV would look like "no change" and never be committed.
+          git add occupancy-cloud.csv
+          if git diff --cached --quiet; then
             echo "No change, nothing to commit."
             exit 0
           fi
-          git config user.name  "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add occupancy-cloud.csv
           git commit -m "Cloud reading $(TZ=Europe/Vilnius date '+%Y-%m-%d %H:%M')"
           # Another run may have pushed while this one was fetching.
           for i in 1 2 3; do
