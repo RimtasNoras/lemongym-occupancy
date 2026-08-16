@@ -47,7 +47,12 @@ with open(shared, 'w', newline='') as fh:
 print(len(merged))
 PY
 
-git add "$SHARED"
+# Rebuild the report so the dashed estimates are recomputed against the
+# newly-merged data: gaps shrink as real readings arrive, and the time-of-day
+# model behind each estimate improves with every extra day observed.
+python3 "$DIR/build-report.py" >/dev/null 2>&1 || echo "$(stamp) merge: report rebuild failed" >&2
+
+git add "$SHARED" "$DIR/report.html"
 if git diff --cached --quiet; then
     echo "$(stamp) merge: nothing new"
     exit 0

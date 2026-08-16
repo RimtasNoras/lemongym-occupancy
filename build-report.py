@@ -75,7 +75,10 @@ for a, b in zip(points, points[1:]):
             f = (m - a['m']) / span                # blend the endpoint offsets
             corr = (a['v'] - sa) * (1 - f) + (b['v'] - sb) * f
             est = base + corr
-        seg.append({'m': m, 'v': max(0, round(est, 1))})
+        _dt = _d0 + datetime.timedelta(days=m // 1440)
+        seg.append({'m': m, 'v': max(0, round(est, 1)),
+                    'd': _dt.isoformat(), 't': '%02d:%02d' % (m % 1440 // 60, m % 60),
+                    'w': _dt.strftime('%a')})
     seg.append({'m': b['m'], 'v': b['v'], 'real': True})
     segments.append({'pts': seg, 'mins': span})
 

@@ -115,6 +115,12 @@
   }
   .tip .tv { font-weight: 650; font-size: 0.95rem; }
   .tip .tt { color: var(--text-secondary); font-size: 0.75rem; }
+  .tip.est { border-color: var(--estimate); }
+  .tip.est .tv { color: var(--estimate); }
+  .tip .badge {
+    display: block; margin-top: 3px; font-size: 0.68rem; font-weight: 600;
+    letter-spacing: 0.04em; text-transform: uppercase; color: var(--estimate);
+  }
   .plot-host { position: relative; }
 
   details {
@@ -313,18 +319,32 @@ document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
   const host = document.getElementById('host1'), tip = document.getElementById('tip1');
   host.insertBefore(svg, tip);
 
+  /* Hover covers estimated points too -- they are readable, but always
+     labelled as estimates and drawn with the estimate colour, never passed
+     off as a measurement. */
+  const HOVER = P.map(p => ({...p, est:false}));
+  (DATA.estimates || []).forEach(seg => seg.pts.forEach(p => {
+    if (!p.real) HOVER.push({...p, est:true});
+  }));
+  HOVER.sort((a,b) => a.m - b.m);
+
   const move = ev => {
     const r = svg.getBoundingClientRect();
     const mx = (ev.clientX - r.left) / r.width * W;
     if (mx < ML || mx > W-MR) { cross.setAttribute('opacity',0); dot.setAttribute('opacity',0); tip.style.opacity=0; return; }
-    let best = P[0], bd = 1e9;
-    for (const p of P) { const dd = Math.abs(x(p.m)-mx); if (dd < bd) { bd = dd; best = p; } }
+    let best = HOVER[0], bd = 1e9;
+    for (const p of HOVER) { const dd = Math.abs(x(p.m)-mx); if (dd < bd) { bd = dd; best = p; } }
     cross.setAttribute('x1', x(best.m)); cross.setAttribute('x2', x(best.m)); cross.setAttribute('opacity',1);
-    dot.setAttribute('cx', x(best.m)); dot.setAttribute('cy', y(best.v)); dot.setAttribute('opacity',1);
-    tip.innerHTML = `<div class="tv">${best.v}%</div><div class="tt">${best.w} ${best.t}</div>`;
+    dot.setAttribute('cx', x(best.m)); dot.setAttribute('cy', y(best.v));
+    dot.setAttribute('fill', best.est ? 'var(--estimate)' : 'var(--series-1)');
+    dot.setAttribute('opacity',1);
+    tip.classList.toggle('est', best.est);
+    tip.innerHTML = best.est
+      ? `<div class="tv">~${best.v}%</div><div class="tt">${best.w} ${best.t}</div><span class="badge">Estimated</span>`
+      : `<div class="tv">${best.v}%</div><div class="tt">${best.w} ${best.t}</div>`;
     const px = x(best.m) / W * r.width;
     tip.style.left = Math.min(Math.max(px - 34, 0), r.width - 92) + 'px';
-    tip.style.top = (y(best.v) / H * r.height - 54) + 'px';
+    tip.style.top = (y(best.v) / H * r.height - (best.est ? 74 : 54)) + 'px';
     tip.style.opacity = 1;
   };
   svg.addEventListener('mousemove', move);
