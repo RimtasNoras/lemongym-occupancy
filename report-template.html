@@ -1,0 +1,343 @@
+<title>Raudondvaris Occupancy</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --night:          rgba(11,11,11,0.035);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --night:          rgba(255,255,255,0.045);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --night:          rgba(255,255,255,0.045);
+  }
+
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 20px 72px; }
+
+  header { margin-bottom: 28px; }
+  h1 { font-size: 1.75rem; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }
+  .sub b { color: var(--text-primary); font-weight: 600; }
+
+  .tiles {
+    display: grid; gap: 12px; margin-bottom: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .tile .label {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); margin-bottom: 6px;
+  }
+  .tile .value { font-size: 1.9rem; font-weight: 650; letter-spacing: -0.02em; }
+  .tile .meta { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 18px 12px; margin: 0 0 20px;
+  }
+  .card h2 { font-size: 0.98rem; font-weight: 620; margin: 0 0 2px; }
+  .card .note { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 12px; }
+
+  .chart-scroll { overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; min-width: 560px; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axisline { stroke: var(--axis); stroke-width: 1; }
+  .tick { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .axis-title { fill: var(--text-muted); font-size: 11px; }
+  .series-line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .anno-label { fill: var(--text-primary); font-size: 11.5px; font-weight: 620; }
+  .anno-sub { fill: var(--text-secondary); font-size: 10.5px; }
+  .band-label { fill: var(--text-muted); font-size: 10.5px; letter-spacing: 0.04em; }
+  .bar { fill: var(--series-1); }
+  .crosshair { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
+
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: 0.8rem;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.13); white-space: nowrap;
+    transition: opacity .1s; z-index: 5; color: var(--text-primary);
+  }
+  .tip .tv { font-weight: 650; font-size: 0.95rem; }
+  .tip .tt { color: var(--text-secondary); font-size: 0.75rem; }
+  .plot-host { position: relative; }
+
+  details {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 18px;
+  }
+  summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+  summary:focus-visible { outline: 2px solid var(--series-1); outline-offset: 3px; border-radius: 4px; }
+  .tbl-scroll { overflow-x: auto; margin-top: 14px; max-height: 460px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+  th, td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--grid); }
+  th {
+    color: var(--text-muted); font-weight: 600; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    position: sticky; top: 0; background: var(--surface-1);
+  }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  footer { margin-top: 26px; font-size: 0.78rem; color: var(--text-muted); }
+
+  @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Raudondvaris Occupancy</h1>
+    <p class="sub" id="sub"></p>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <figure class="card">
+    <h2 id="ch1title">Every reading</h2>
+    <p class="note">Hover for exact values. Shaded region marks 23:00&ndash;06:00.</p>
+    <div class="chart-scroll"><div class="plot-host" id="host1"><div class="tip" id="tip1"></div></div></div>
+  </figure>
+
+  <figure class="card">
+    <h2>Hourly average</h2>
+    <p class="note">The same readings averaged per clock hour, smoothing the 10-minute jitter.</p>
+    <div class="chart-scroll"><div class="plot-host" id="host2"><div class="tip" id="tip2"></div></div></div>
+  </figure>
+
+  <details>
+    <summary id="tblsummary">Data table</summary>
+    <div class="tbl-scroll"><table id="tbl">
+      <thead><tr><th>Day</th><th>Time</th><th class="num">Occupancy</th><th class="num">Change</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </details>
+
+  <footer>
+    Source: lemongym.lt club-occupancy feed, sampled on a local 10-minute schedule.
+    A reading is recorded only when the fetch succeeds &mdash; failed fetches leave a gap rather than a guessed value.
+  </footer>
+</div>
+
+<script>
+const DATA = __DATA__;
+const P = DATA.points, HR = DATA.hourly;
+const M0 = P[0].m, M1 = P[P.length-1].m;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtH = m => String(Math.floor(m/60)%24).padStart(2,'0') + ':00';
+const fmtDay = p => { const [, mo, d] = p.d.split('-'); return `${p.w} ${+d} ${MONTHS[+mo-1]}`; };
+const svgNS = 'http://www.w3.org/2000/svg';
+const el = (n, a) => { const e = document.createElementNS(svgNS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+const peak = P.reduce((a,b) => b.v > a.v ? b : a);
+const low  = P.reduce((a,b) => b.v < a.v ? b : a);
+const last = P[P.length-1];
+const prev = P[P.length-2] || last;
+
+/* day segments, for dividers and axis labels */
+const DAYS = [];
+for (const p of P) {
+  let s = DAYS.find(x => x.d === p.d);
+  if (!s) { s = {d:p.d, w:p.w, m0:p.m, m1:p.m, label:fmtDay(p)}; DAYS.push(s); }
+  s.m1 = p.m;
+}
+
+/* ---------- header + tiles ---------- */
+document.getElementById('sub').innerHTML =
+  `Lemon Gym, Raudondvario pl. 169b, Kaunas &middot; <b>${P.length} readings</b> at 10-minute intervals &middot; ` +
+  `${fmtDay(P[0])} ${P[0].t} &rarr; ${fmtDay(last)} ${last.t} (Europe/Vilnius)`;
+
+document.getElementById('ch1title').textContent =
+  `Every reading, ${fmtDay(P[0])} to ${fmtDay(last)}`;
+document.getElementById('tblsummary').innerHTML =
+  `Data table &mdash; all ${P.length} readings`;
+
+const trend = last.v > prev.v ? 'rising' : last.v < prev.v ? 'falling' : 'flat';
+const hoursSpan = ((M1 - M0) / 60).toFixed(1);
+const tiles = [
+  ['Busiest',  peak.v + '%', `${fmtDay(peak)} ${peak.t}`],
+  ['Quietest', low.v  + '%', `${fmtDay(low)} ${low.t}`],
+  ['Latest',   last.v + '%', `${last.t}, ${trend}`],
+  ['Coverage', P.length,     `${hoursSpan} hours logged`],
+];
+document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
+  `<div class="tile"><div class="label">${l}</div><div class="value">${v}</div><div class="meta">${m}</div></div>`
+).join('');
+
+/* ---------- Chart 1: full timeline ---------- */
+(function () {
+  const W=1000, H=360, ML=44, MR=18, MT=26, MB=44;
+  const YMAX = Math.max(10, Math.ceil((peak.v + 6) / 10) * 10);
+  const x = m => ML + (m - M0) / (M1 - M0) * (W - ML - MR);
+  const y = v => MT + (1 - v / YMAX) * (H - MT - MB);
+
+  const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img',
+    'aria-label':`Line chart of gym occupancy across ${P.length} readings, peaking at ${peak.v} percent and bottoming at ${low.v} percent.`});
+
+  const grad = el('linearGradient', {id:'g1', x1:'0', y1:'0', x2:'0', y2:'1'});
+  grad.appendChild(el('stop', {offset:'0%',  'stop-color':'var(--series-1)', 'stop-opacity':'0.20'}));
+  grad.appendChild(el('stop', {offset:'100%','stop-color':'var(--series-1)', 'stop-opacity':'0.02'}));
+  const defs = el('defs'); defs.appendChild(grad); svg.appendChild(defs);
+
+  /* overnight bands: 23:00 -> 06:00 of each night inside the range */
+  for (let base = -1440; base <= M1; base += 1440) {
+    const s = Math.max(base + 1380, M0), e = Math.min(base + 1800, M1);
+    if (e <= s) continue;
+    svg.appendChild(el('rect', {x:x(s), y:MT, width:x(e)-x(s), height:H-MT-MB, fill:'var(--night)'}));
+    if (x(e) - x(s) > 70) {
+      const bl = el('text', {x:(x(s)+x(e))/2, y:MT+14, 'text-anchor':'middle', class:'band-label'});
+      bl.textContent = 'OVERNIGHT'; svg.appendChild(bl);
+    }
+  }
+
+  const step = YMAX <= 40 ? 10 : 20;
+  for (let v = 0; v <= YMAX; v += step) {
+    svg.appendChild(el('line', {x1:ML, y1:y(v), x2:W-MR, y2:y(v), class: v===0 ? 'axisline' : 'gridline'}));
+    const t = el('text', {x:ML-9, y:y(v)+4, 'text-anchor':'end', class:'tick'});
+    t.textContent = v + '%'; svg.appendChild(t);
+  }
+
+  const tickStep = (M1 - M0) > 1500 ? 180 : 120;
+  for (let m = Math.ceil(M0/60)*60; m <= M1; m += tickStep) {
+    const t = el('text', {x:x(m), y:H-MB+18, 'text-anchor':'middle', class:'tick'});
+    t.textContent = fmtH(m); svg.appendChild(t);
+  }
+
+  DAYS.forEach((s,i) => {
+    if (i > 0) svg.appendChild(el('line', {x1:x(s.m0), y1:MT, x2:x(s.m0), y2:H-MB, class:'gridline'}));
+    const t = el('text', {x:(x(s.m0)+x(s.m1))/2, y:H-MB+34, 'text-anchor':'middle', class:'axis-title'});
+    t.textContent = s.label; svg.appendChild(t);
+  });
+
+  const d = P.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
+  svg.appendChild(el('path', {d: d + ` L ${x(M1).toFixed(1)} ${y(0)} L ${x(M0).toFixed(1)} ${y(0)} Z`, fill:'url(#g1)'}));
+  svg.appendChild(el('path', {d, class:'series-line', 'vector-effect':'non-scaling-stroke'}));
+
+  /* selective direct labels only: the peak and the floor */
+  [[peak, peak.v + '% peak', `${peak.w} ${peak.t}`, -18],
+   [low,  low.v  + '% floor', `${low.w} ${low.t}`,  -30]].forEach(([pt,lab,sub,dy]) => {
+    const cx = Math.min(Math.max(x(pt.m), ML+34), W-MR-34);
+    svg.appendChild(el('circle', {cx:x(pt.m), cy:y(pt.v), r:4.5, fill:'var(--series-1)',
+      stroke:'var(--surface-1)', 'stroke-width':2}));
+    const a = el('text', {x:cx, y:y(pt.v)+dy, 'text-anchor':'middle', class:'anno-label'});
+    a.textContent = lab; svg.appendChild(a);
+    const b = el('text', {x:cx, y:y(pt.v)+dy+13, 'text-anchor':'middle', class:'anno-sub'});
+    b.textContent = sub; svg.appendChild(b);
+  });
+
+  const cross = el('line', {y1:MT, y2:H-MB, class:'crosshair', opacity:0});
+  const dot = el('circle', {r:5, fill:'var(--series-1)', stroke:'var(--surface-1)', 'stroke-width':2, opacity:0});
+  svg.appendChild(cross); svg.appendChild(dot);
+  const host = document.getElementById('host1'), tip = document.getElementById('tip1');
+  host.insertBefore(svg, tip);
+
+  const move = ev => {
+    const r = svg.getBoundingClientRect();
+    const mx = (ev.clientX - r.left) / r.width * W;
+    if (mx < ML || mx > W-MR) { cross.setAttribute('opacity',0); dot.setAttribute('opacity',0); tip.style.opacity=0; return; }
+    let best = P[0], bd = 1e9;
+    for (const p of P) { const dd = Math.abs(x(p.m)-mx); if (dd < bd) { bd = dd; best = p; } }
+    cross.setAttribute('x1', x(best.m)); cross.setAttribute('x2', x(best.m)); cross.setAttribute('opacity',1);
+    dot.setAttribute('cx', x(best.m)); dot.setAttribute('cy', y(best.v)); dot.setAttribute('opacity',1);
+    tip.innerHTML = `<div class="tv">${best.v}%</div><div class="tt">${best.w} ${best.t}</div>`;
+    const px = x(best.m) / W * r.width;
+    tip.style.left = Math.min(Math.max(px - 34, 0), r.width - 92) + 'px';
+    tip.style.top = (y(best.v) / H * r.height - 54) + 'px';
+    tip.style.opacity = 1;
+  };
+  svg.addEventListener('mousemove', move);
+  svg.addEventListener('mouseleave', () => { cross.setAttribute('opacity',0); dot.setAttribute('opacity',0); tip.style.opacity=0; });
+})();
+
+/* ---------- Chart 2: hourly average ---------- */
+(function () {
+  const W=1000, H=250, ML=44, MR=18, MT=18, MB=40;
+  const YMAX = Math.max(10, Math.ceil((peak.v + 6) / 10) * 10);
+  const n = HR.length, bw = (W - ML - MR) / n;
+  const y = v => MT + (1 - v / YMAX) * (H - MT - MB);
+
+  const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img',
+    'aria-label':`Bar chart of average occupancy per clock hour across ${n} hours.`});
+
+  const step = YMAX <= 40 ? 10 : 20;
+  for (let v = 0; v <= YMAX; v += step) {
+    svg.appendChild(el('line', {x1:ML, y1:y(v), x2:W-MR, y2:y(v), class: v===0 ? 'axisline' : 'gridline'}));
+    const t = el('text', {x:ML-9, y:y(v)+4, 'text-anchor':'end', class:'tick'});
+    t.textContent = v + '%'; svg.appendChild(t);
+  }
+
+  const labelEvery = n > 16 ? 2 : 1;
+  HR.forEach((h,i) => {
+    const bx = ML + i*bw + 1, w = bw - 2;              /* 2px surface gap */
+    svg.appendChild(el('rect', {x:bx, y:y(h.avg), width:w,
+      height:Math.max(y(0)-y(h.avg), 2), rx:4, class:'bar'}));
+    if (i % labelEvery === 0) {
+      const t = el('text', {x:bx + w/2, y:H-MB+18, 'text-anchor':'middle', class:'tick'});
+      t.textContent = fmtH(h.m); svg.appendChild(t);
+    }
+  });
+
+  const host = document.getElementById('host2'), tip = document.getElementById('tip2');
+  host.insertBefore(svg, tip);
+  svg.addEventListener('mousemove', ev => {
+    const r = svg.getBoundingClientRect();
+    const i = Math.floor(((ev.clientX - r.left) / r.width * W - ML) / bw);
+    if (i < 0 || i >= n) { tip.style.opacity = 0; return; }
+    const h = HR[i];
+    tip.innerHTML = `<div class="tv">${h.avg}%</div><div class="tt">${fmtH(h.m)} &middot; ${h.n} readings &middot; ${h.min}–${h.max}%</div>`;
+    const px = (ML + i*bw + bw/2) / W * r.width;
+    tip.style.left = Math.min(Math.max(px - 70, 0), r.width - 168) + 'px';
+    tip.style.top = (y(h.avg) / H * r.height - 56) + 'px';
+    tip.style.opacity = 1;
+  });
+  svg.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+})();
+
+/* ---------- Table ---------- */
+(function () {
+  let p0 = null;
+  document.querySelector('#tbl tbody').innerHTML = P.map(p => {
+    const d = p0 === null ? '' : (p.v > p0 ? '+' + (p.v-p0) : (p.v < p0 ? (p.v-p0) : '='));
+    p0 = p.v;
+    return `<tr><td>${p.w}</td><td>${p.t}</td><td class="num">${p.v}%</td><td class="num">${d}</td></tr>`;
+  }).join('');
+})();
+</script>

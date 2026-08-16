@@ -1,0 +1,343 @@
+<title>Raudondvaris Occupancy</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page:           #f9f9f7;
+    --surface-1:      #fcfcfb;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --grid:           #e1e0d9;
+    --axis:           #c3c2b7;
+    --border:         rgba(11,11,11,0.10);
+    --series-1:       #2a78d6;
+    --night:          rgba(11,11,11,0.035);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --page:           #0d0d0d;
+      --surface-1:      #1a1a19;
+      --text-primary:   #ffffff;
+      --text-secondary: #c3c2b7;
+      --text-muted:     #898781;
+      --grid:           #2c2c2a;
+      --axis:           #383835;
+      --border:         rgba(255,255,255,0.10);
+      --series-1:       #3987e5;
+      --night:          rgba(255,255,255,0.045);
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --page:           #0d0d0d;
+    --surface-1:      #1a1a19;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --grid:           #2c2c2a;
+    --axis:           #383835;
+    --border:         rgba(255,255,255,0.10);
+    --series-1:       #3987e5;
+    --night:          rgba(255,255,255,0.045);
+  }
+
+  body {
+    margin: 0;
+    background: var(--page);
+    color: var(--text-primary);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    line-height: 1.5;
+  }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 40px 20px 72px; }
+
+  header { margin-bottom: 28px; }
+  h1 { font-size: 1.75rem; font-weight: 650; margin: 0 0 6px; letter-spacing: -0.01em; }
+  .sub { margin: 0; color: var(--text-secondary); font-size: 0.9rem; }
+  .sub b { color: var(--text-primary); font-weight: 600; }
+
+  .tiles {
+    display: grid; gap: 12px; margin-bottom: 24px;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  }
+  .tile {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 10px; padding: 14px 16px;
+  }
+  .tile .label {
+    font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em;
+    color: var(--text-muted); margin-bottom: 6px;
+  }
+  .tile .value { font-size: 1.9rem; font-weight: 650; letter-spacing: -0.02em; }
+  .tile .meta { font-size: 0.78rem; color: var(--text-secondary); margin-top: 2px; }
+
+  .card {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 18px 18px 12px; margin: 0 0 20px;
+  }
+  .card h2 { font-size: 0.98rem; font-weight: 620; margin: 0 0 2px; }
+  .card .note { font-size: 0.8rem; color: var(--text-secondary); margin: 0 0 12px; }
+
+  .chart-scroll { overflow-x: auto; }
+  svg { display: block; width: 100%; height: auto; min-width: 560px; }
+  .gridline { stroke: var(--grid); stroke-width: 1; }
+  .axisline { stroke: var(--axis); stroke-width: 1; }
+  .tick { fill: var(--text-muted); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .axis-title { fill: var(--text-muted); font-size: 11px; }
+  .series-line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  .anno-label { fill: var(--text-primary); font-size: 11.5px; font-weight: 620; }
+  .anno-sub { fill: var(--text-secondary); font-size: 10.5px; }
+  .band-label { fill: var(--text-muted); font-size: 10.5px; letter-spacing: 0.04em; }
+  .bar { fill: var(--series-1); }
+  .crosshair { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
+
+  .tip {
+    position: absolute; pointer-events: none; opacity: 0;
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 8px; padding: 7px 10px; font-size: 0.8rem;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.13); white-space: nowrap;
+    transition: opacity .1s; z-index: 5; color: var(--text-primary);
+  }
+  .tip .tv { font-weight: 650; font-size: 0.95rem; }
+  .tip .tt { color: var(--text-secondary); font-size: 0.75rem; }
+  .plot-host { position: relative; }
+
+  details {
+    background: var(--surface-1); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 18px;
+  }
+  summary { cursor: pointer; font-size: 0.9rem; font-weight: 600; }
+  summary:focus-visible { outline: 2px solid var(--series-1); outline-offset: 3px; border-radius: 4px; }
+  .tbl-scroll { overflow-x: auto; margin-top: 14px; max-height: 460px; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.82rem; }
+  th, td { text-align: left; padding: 5px 10px; border-bottom: 1px solid var(--grid); }
+  th {
+    color: var(--text-muted); font-weight: 600; font-size: 0.72rem;
+    text-transform: uppercase; letter-spacing: 0.05em;
+    position: sticky; top: 0; background: var(--surface-1);
+  }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+
+  footer { margin-top: 26px; font-size: 0.78rem; color: var(--text-muted); }
+
+  @media (prefers-reduced-motion: reduce) { .tip { transition: none; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Raudondvaris Occupancy</h1>
+    <p class="sub" id="sub"></p>
+  </header>
+
+  <div class="tiles" id="tiles"></div>
+
+  <figure class="card">
+    <h2 id="ch1title">Every reading</h2>
+    <p class="note">Hover for exact values. Shaded region marks 23:00&ndash;06:00.</p>
+    <div class="chart-scroll"><div class="plot-host" id="host1"><div class="tip" id="tip1"></div></div></div>
+  </figure>
+
+  <figure class="card">
+    <h2>Hourly average</h2>
+    <p class="note">The same readings averaged per clock hour, smoothing the 10-minute jitter.</p>
+    <div class="chart-scroll"><div class="plot-host" id="host2"><div class="tip" id="tip2"></div></div></div>
+  </figure>
+
+  <details>
+    <summary id="tblsummary">Data table</summary>
+    <div class="tbl-scroll"><table id="tbl">
+      <thead><tr><th>Day</th><th>Time</th><th class="num">Occupancy</th><th class="num">Change</th></tr></thead>
+      <tbody></tbody>
+    </table></div>
+  </details>
+
+  <footer>
+    Source: lemongym.lt club-occupancy feed, sampled on a local 10-minute schedule.
+    A reading is recorded only when the fetch succeeds &mdash; failed fetches leave a gap rather than a guessed value.
+  </footer>
+</div>
+
+<script>
+const DATA = {"points":[{"m":721,"v":38,"d":"2026-08-13","t":"12:01","w":"Thu"},{"m":726,"v":38,"d":"2026-08-13","t":"12:06","w":"Thu"},{"m":742,"v":39,"d":"2026-08-13","t":"12:22","w":"Thu"},{"m":745,"v":39,"d":"2026-08-13","t":"12:25","w":"Thu"},{"m":754,"v":40,"d":"2026-08-13","t":"12:34","w":"Thu"},{"m":764,"v":40,"d":"2026-08-13","t":"12:44","w":"Thu"},{"m":774,"v":40,"d":"2026-08-13","t":"12:54","w":"Thu"},{"m":784,"v":40,"d":"2026-08-13","t":"13:04","w":"Thu"},{"m":794,"v":41,"d":"2026-08-13","t":"13:14","w":"Thu"},{"m":804,"v":38,"d":"2026-08-13","t":"13:24","w":"Thu"},{"m":814,"v":34,"d":"2026-08-13","t":"13:34","w":"Thu"},{"m":824,"v":34,"d":"2026-08-13","t":"13:44","w":"Thu"},{"m":834,"v":35,"d":"2026-08-13","t":"13:54","w":"Thu"},{"m":844,"v":36,"d":"2026-08-13","t":"14:04","w":"Thu"},{"m":854,"v":32,"d":"2026-08-13","t":"14:14","w":"Thu"},{"m":864,"v":32,"d":"2026-08-13","t":"14:24","w":"Thu"},{"m":874,"v":32,"d":"2026-08-13","t":"14:34","w":"Thu"},{"m":894,"v":32,"d":"2026-08-13","t":"14:54","w":"Thu"},{"m":904,"v":32,"d":"2026-08-13","t":"15:04","w":"Thu"},{"m":914,"v":32,"d":"2026-08-13","t":"15:14","w":"Thu"},{"m":925,"v":30,"d":"2026-08-13","t":"15:25","w":"Thu"},{"m":935,"v":29,"d":"2026-08-13","t":"15:35","w":"Thu"},{"m":945,"v":29,"d":"2026-08-13","t":"15:45","w":"Thu"},{"m":955,"v":27,"d":"2026-08-13","t":"15:55","w":"Thu"},{"m":965,"v":25,"d":"2026-08-13","t":"16:05","w":"Thu"},{"m":975,"v":26,"d":"2026-08-13","t":"16:15","w":"Thu"},{"m":985,"v":27,"d":"2026-08-13","t":"16:25","w":"Thu"},{"m":995,"v":27,"d":"2026-08-13","t":"16:35","w":"Thu"},{"m":1005,"v":28,"d":"2026-08-13","t":"16:45","w":"Thu"},{"m":1015,"v":32,"d":"2026-08-13","t":"16:55","w":"Thu"},{"m":1025,"v":33,"d":"2026-08-13","t":"17:05","w":"Thu"},{"m":1035,"v":34,"d":"2026-08-13","t":"17:15","w":"Thu"},{"m":1045,"v":33,"d":"2026-08-13","t":"17:25","w":"Thu"},{"m":1055,"v":34,"d":"2026-08-13","t":"17:35","w":"Thu"},{"m":1065,"v":39,"d":"2026-08-13","t":"17:45","w":"Thu"},{"m":1075,"v":42,"d":"2026-08-13","t":"17:55","w":"Thu"},{"m":1085,"v":45,"d":"2026-08-13","t":"18:05","w":"Thu"},{"m":1095,"v":44,"d":"2026-08-13","t":"18:15","w":"Thu"},{"m":1105,"v":45,"d":"2026-08-13","t":"18:25","w":"Thu"},{"m":1115,"v":46,"d":"2026-08-13","t":"18:35","w":"Thu"},{"m":1126,"v":48,"d":"2026-08-13","t":"18:46","w":"Thu"},{"m":1136,"v":55,"d":"2026-08-13","t":"18:56","w":"Thu"},{"m":1146,"v":56,"d":"2026-08-13","t":"19:06","w":"Thu"},{"m":1156,"v":57,"d":"2026-08-13","t":"19:16","w":"Thu"},{"m":1166,"v":60,"d":"2026-08-13","t":"19:26","w":"Thu"},{"m":1176,"v":63,"d":"2026-08-13","t":"19:36","w":"Thu"},{"m":1186,"v":64,"d":"2026-08-13","t":"19:46","w":"Thu"},{"m":1196,"v":64,"d":"2026-08-13","t":"19:56","w":"Thu"},{"m":1204,"v":66,"d":"2026-08-13","t":"20:04","w":"Thu"},{"m":1206,"v":67,"d":"2026-08-13","t":"20:06","w":"Thu"},{"m":1216,"v":64,"d":"2026-08-13","t":"20:16","w":"Thu"},{"m":1226,"v":60,"d":"2026-08-13","t":"20:26","w":"Thu"},{"m":1236,"v":60,"d":"2026-08-13","t":"20:36","w":"Thu"},{"m":1246,"v":58,"d":"2026-08-13","t":"20:46","w":"Thu"},{"m":1256,"v":58,"d":"2026-08-13","t":"20:56","w":"Thu"},{"m":1266,"v":56,"d":"2026-08-13","t":"21:06","w":"Thu"},{"m":1276,"v":52,"d":"2026-08-13","t":"21:16","w":"Thu"},{"m":1286,"v":48,"d":"2026-08-13","t":"21:26","w":"Thu"},{"m":1296,"v":45,"d":"2026-08-13","t":"21:36","w":"Thu"},{"m":1306,"v":44,"d":"2026-08-13","t":"21:46","w":"Thu"},{"m":1316,"v":44,"d":"2026-08-13","t":"21:56","w":"Thu"},{"m":1327,"v":42,"d":"2026-08-13","t":"22:07","w":"Thu"},{"m":1337,"v":41,"d":"2026-08-13","t":"22:17","w":"Thu"},{"m":1347,"v":33,"d":"2026-08-13","t":"22:27","w":"Thu"},{"m":1357,"v":31,"d":"2026-08-13","t":"22:37","w":"Thu"},{"m":1367,"v":28,"d":"2026-08-13","t":"22:47","w":"Thu"},{"m":1377,"v":25,"d":"2026-08-13","t":"22:57","w":"Thu"},{"m":1387,"v":22,"d":"2026-08-13","t":"23:07","w":"Thu"},{"m":1397,"v":19,"d":"2026-08-13","t":"23:17","w":"Thu"},{"m":1407,"v":17,"d":"2026-08-13","t":"23:27","w":"Thu"},{"m":1417,"v":14,"d":"2026-08-13","t":"23:37","w":"Thu"},{"m":1427,"v":13,"d":"2026-08-13","t":"23:47","w":"Thu"},{"m":1437,"v":12,"d":"2026-08-13","t":"23:57","w":"Thu"},{"m":1447,"v":10,"d":"2026-08-14","t":"00:07","w":"Fri"},{"m":1457,"v":10,"d":"2026-08-14","t":"00:17","w":"Fri"},{"m":1467,"v":8,"d":"2026-08-14","t":"00:27","w":"Fri"},{"m":1477,"v":8,"d":"2026-08-14","t":"00:37","w":"Fri"},{"m":1487,"v":7,"d":"2026-08-14","t":"00:47","w":"Fri"},{"m":1497,"v":6,"d":"2026-08-14","t":"00:57","w":"Fri"},{"m":1507,"v":6,"d":"2026-08-14","t":"01:07","w":"Fri"},{"m":1517,"v":5,"d":"2026-08-14","t":"01:17","w":"Fri"},{"m":1527,"v":4,"d":"2026-08-14","t":"01:27","w":"Fri"},{"m":1538,"v":4,"d":"2026-08-14","t":"01:38","w":"Fri"},{"m":1548,"v":4,"d":"2026-08-14","t":"01:48","w":"Fri"},{"m":1558,"v":3,"d":"2026-08-14","t":"01:58","w":"Fri"},{"m":1568,"v":2,"d":"2026-08-14","t":"02:08","w":"Fri"},{"m":1578,"v":2,"d":"2026-08-14","t":"02:18","w":"Fri"},{"m":1588,"v":2,"d":"2026-08-14","t":"02:28","w":"Fri"},{"m":1598,"v":2,"d":"2026-08-14","t":"02:38","w":"Fri"},{"m":1608,"v":2,"d":"2026-08-14","t":"02:48","w":"Fri"},{"m":1618,"v":1,"d":"2026-08-14","t":"02:58","w":"Fri"},{"m":1628,"v":1,"d":"2026-08-14","t":"03:08","w":"Fri"},{"m":1638,"v":1,"d":"2026-08-14","t":"03:18","w":"Fri"},{"m":1648,"v":1,"d":"2026-08-14","t":"03:28","w":"Fri"},{"m":1658,"v":1,"d":"2026-08-14","t":"03:38","w":"Fri"},{"m":1668,"v":1,"d":"2026-08-14","t":"03:48","w":"Fri"},{"m":1678,"v":1,"d":"2026-08-14","t":"03:58","w":"Fri"},{"m":1688,"v":1,"d":"2026-08-14","t":"04:08","w":"Fri"},{"m":1698,"v":1,"d":"2026-08-14","t":"04:18","w":"Fri"},{"m":1708,"v":1,"d":"2026-08-14","t":"04:28","w":"Fri"},{"m":1718,"v":1,"d":"2026-08-14","t":"04:38","w":"Fri"},{"m":1728,"v":1,"d":"2026-08-14","t":"04:48","w":"Fri"},{"m":1738,"v":1,"d":"2026-08-14","t":"04:58","w":"Fri"},{"m":1749,"v":2,"d":"2026-08-14","t":"05:09","w":"Fri"},{"m":1759,"v":2,"d":"2026-08-14","t":"05:19","w":"Fri"},{"m":1769,"v":2,"d":"2026-08-14","t":"05:29","w":"Fri"},{"m":1779,"v":2,"d":"2026-08-14","t":"05:39","w":"Fri"},{"m":1789,"v":3,"d":"2026-08-14","t":"05:49","w":"Fri"},{"m":1799,"v":4,"d":"2026-08-14","t":"05:59","w":"Fri"},{"m":1809,"v":4,"d":"2026-08-14","t":"06:09","w":"Fri"},{"m":1819,"v":5,"d":"2026-08-14","t":"06:19","w":"Fri"},{"m":1829,"v":7,"d":"2026-08-14","t":"06:29","w":"Fri"},{"m":1839,"v":8,"d":"2026-08-14","t":"06:39","w":"Fri"},{"m":1849,"v":10,"d":"2026-08-14","t":"06:49","w":"Fri"},{"m":1859,"v":12,"d":"2026-08-14","t":"06:59","w":"Fri"},{"m":1869,"v":13,"d":"2026-08-14","t":"07:09","w":"Fri"},{"m":1879,"v":14,"d":"2026-08-14","t":"07:19","w":"Fri"},{"m":1889,"v":14,"d":"2026-08-14","t":"07:29","w":"Fri"},{"m":1899,"v":16,"d":"2026-08-14","t":"07:39","w":"Fri"},{"m":1909,"v":16,"d":"2026-08-14","t":"07:49","w":"Fri"},{"m":1919,"v":17,"d":"2026-08-14","t":"07:59","w":"Fri"},{"m":1929,"v":18,"d":"2026-08-14","t":"08:09","w":"Fri"},{"m":1939,"v":20,"d":"2026-08-14","t":"08:19","w":"Fri"},{"m":1949,"v":23,"d":"2026-08-14","t":"08:29","w":"Fri"},{"m":1960,"v":25,"d":"2026-08-14","t":"08:40","w":"Fri"},{"m":1970,"v":26,"d":"2026-08-14","t":"08:50","w":"Fri"},{"m":1980,"v":26,"d":"2026-08-14","t":"09:00","w":"Fri"},{"m":1990,"v":27,"d":"2026-08-14","t":"09:10","w":"Fri"},{"m":2000,"v":26,"d":"2026-08-14","t":"09:20","w":"Fri"},{"m":2010,"v":29,"d":"2026-08-14","t":"09:30","w":"Fri"},{"m":2020,"v":30,"d":"2026-08-14","t":"09:40","w":"Fri"},{"m":2030,"v":32,"d":"2026-08-14","t":"09:50","w":"Fri"},{"m":2040,"v":32,"d":"2026-08-14","t":"10:00","w":"Fri"},{"m":2050,"v":33,"d":"2026-08-14","t":"10:10","w":"Fri"},{"m":2060,"v":32,"d":"2026-08-14","t":"10:20","w":"Fri"},{"m":2070,"v":32,"d":"2026-08-14","t":"10:30","w":"Fri"},{"m":2080,"v":31,"d":"2026-08-14","t":"10:40","w":"Fri"},{"m":2090,"v":33,"d":"2026-08-14","t":"10:50","w":"Fri"},{"m":2100,"v":35,"d":"2026-08-14","t":"11:00","w":"Fri"},{"m":2110,"v":36,"d":"2026-08-14","t":"11:10","w":"Fri"},{"m":2120,"v":36,"d":"2026-08-14","t":"11:20","w":"Fri"},{"m":2130,"v":36,"d":"2026-08-14","t":"11:30","w":"Fri"},{"m":2140,"v":36,"d":"2026-08-14","t":"11:40","w":"Fri"},{"m":2151,"v":35,"d":"2026-08-14","t":"11:51","w":"Fri"},{"m":2161,"v":35,"d":"2026-08-14","t":"12:01","w":"Fri"},{"m":2171,"v":34,"d":"2026-08-14","t":"12:11","w":"Fri"},{"m":2181,"v":35,"d":"2026-08-14","t":"12:21","w":"Fri"},{"m":2191,"v":35,"d":"2026-08-14","t":"12:31","w":"Fri"},{"m":2201,"v":36,"d":"2026-08-14","t":"12:41","w":"Fri"},{"m":2211,"v":35,"d":"2026-08-14","t":"12:51","w":"Fri"},{"m":2221,"v":34,"d":"2026-08-14","t":"13:01","w":"Fri"},{"m":2231,"v":34,"d":"2026-08-14","t":"13:11","w":"Fri"},{"m":2241,"v":32,"d":"2026-08-14","t":"13:21","w":"Fri"},{"m":2251,"v":31,"d":"2026-08-14","t":"13:31","w":"Fri"},{"m":2261,"v":30,"d":"2026-08-14","t":"13:41","w":"Fri"},{"m":2271,"v":28,"d":"2026-08-14","t":"13:51","w":"Fri"},{"m":2281,"v":30,"d":"2026-08-14","t":"14:01","w":"Fri"},{"m":2291,"v":31,"d":"2026-08-14","t":"14:11","w":"Fri"},{"m":2301,"v":30,"d":"2026-08-14","t":"14:21","w":"Fri"},{"m":2311,"v":28,"d":"2026-08-14","t":"14:31","w":"Fri"},{"m":2321,"v":27,"d":"2026-08-14","t":"14:41","w":"Fri"},{"m":2331,"v":26,"d":"2026-08-14","t":"14:51","w":"Fri"},{"m":2342,"v":28,"d":"2026-08-14","t":"15:02","w":"Fri"},{"m":2352,"v":28,"d":"2026-08-14","t":"15:12","w":"Fri"},{"m":2362,"v":28,"d":"2026-08-14","t":"15:22","w":"Fri"},{"m":2372,"v":29,"d":"2026-08-14","t":"15:32","w":"Fri"},{"m":2382,"v":28,"d":"2026-08-14","t":"15:42","w":"Fri"},{"m":2392,"v":29,"d":"2026-08-14","t":"15:52","w":"Fri"},{"m":2402,"v":30,"d":"2026-08-14","t":"16:02","w":"Fri"},{"m":2412,"v":30,"d":"2026-08-14","t":"16:12","w":"Fri"},{"m":2422,"v":31,"d":"2026-08-14","t":"16:22","w":"Fri"},{"m":2432,"v":31,"d":"2026-08-14","t":"16:32","w":"Fri"},{"m":2442,"v":32,"d":"2026-08-14","t":"16:42","w":"Fri"},{"m":2452,"v":33,"d":"2026-08-14","t":"16:52","w":"Fri"},{"m":2462,"v":35,"d":"2026-08-14","t":"17:02","w":"Fri"},{"m":2472,"v":34,"d":"2026-08-14","t":"17:12","w":"Fri"},{"m":2482,"v":36,"d":"2026-08-14","t":"17:22","w":"Fri"},{"m":2492,"v":36,"d":"2026-08-14","t":"17:32","w":"Fri"},{"m":2502,"v":35,"d":"2026-08-14","t":"17:42","w":"Fri"},{"m":2512,"v":38,"d":"2026-08-14","t":"17:52","w":"Fri"},{"m":2522,"v":41,"d":"2026-08-14","t":"18:02","w":"Fri"},{"m":2532,"v":43,"d":"2026-08-14","t":"18:12","w":"Fri"},{"m":2542,"v":42,"d":"2026-08-14","t":"18:22","w":"Fri"},{"m":2553,"v":43,"d":"2026-08-14","t":"18:33","w":"Fri"}],"hourly":[{"m":720,"avg":39.1,"n":7,"min":38,"max":40},{"m":780,"avg":37.0,"n":6,"min":34,"max":41},{"m":840,"avg":32.8,"n":5,"min":32,"max":36},{"m":900,"avg":29.8,"n":6,"min":27,"max":32},{"m":960,"avg":27.5,"n":6,"min":25,"max":32},{"m":1020,"avg":35.8,"n":6,"min":33,"max":42},{"m":1080,"avg":47.2,"n":6,"min":44,"max":55},{"m":1140,"avg":60.7,"n":6,"min":56,"max":64},{"m":1200,"avg":61.9,"n":7,"min":58,"max":67},{"m":1260,"avg":48.2,"n":6,"min":44,"max":56},{"m":1320,"avg":33.3,"n":6,"min":25,"max":42},{"m":1380,"avg":16.2,"n":6,"min":12,"max":22},{"m":1440,"avg":8.2,"n":6,"min":6,"max":10},{"m":1500,"avg":4.3,"n":6,"min":3,"max":6},{"m":1560,"avg":1.8,"n":6,"min":1,"max":2},{"m":1620,"avg":1.0,"n":6,"min":1,"max":1},{"m":1680,"avg":1.0,"n":6,"min":1,"max":1},{"m":1740,"avg":2.5,"n":6,"min":2,"max":4},{"m":1800,"avg":7.7,"n":6,"min":4,"max":12},{"m":1860,"avg":15.0,"n":6,"min":13,"max":17},{"m":1920,"avg":22.4,"n":5,"min":18,"max":26},{"m":1980,"avg":28.3,"n":6,"min":26,"max":32},{"m":2040,"avg":32.2,"n":6,"min":31,"max":33},{"m":2100,"avg":35.7,"n":6,"min":35,"max":36},{"m":2160,"avg":35.0,"n":6,"min":34,"max":36},{"m":2220,"avg":31.5,"n":6,"min":28,"max":34},{"m":2280,"avg":28.7,"n":6,"min":26,"max":31},{"m":2340,"avg":28.3,"n":6,"min":28,"max":29},{"m":2400,"avg":31.2,"n":6,"min":30,"max":33},{"m":2460,"avg":35.7,"n":6,"min":34,"max":38},{"m":2520,"avg":42.2,"n":4,"min":41,"max":43}]};
+const P = DATA.points, HR = DATA.hourly;
+const M0 = P[0].m, M1 = P[P.length-1].m;
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const fmtH = m => String(Math.floor(m/60)%24).padStart(2,'0') + ':00';
+const fmtDay = p => { const [, mo, d] = p.d.split('-'); return `${p.w} ${+d} ${MONTHS[+mo-1]}`; };
+const svgNS = 'http://www.w3.org/2000/svg';
+const el = (n, a) => { const e = document.createElementNS(svgNS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+
+const peak = P.reduce((a,b) => b.v > a.v ? b : a);
+const low  = P.reduce((a,b) => b.v < a.v ? b : a);
+const last = P[P.length-1];
+const prev = P[P.length-2] || last;
+
+/* day segments, for dividers and axis labels */
+const DAYS = [];
+for (const p of P) {
+  let s = DAYS.find(x => x.d === p.d);
+  if (!s) { s = {d:p.d, w:p.w, m0:p.m, m1:p.m, label:fmtDay(p)}; DAYS.push(s); }
+  s.m1 = p.m;
+}
+
+/* ---------- header + tiles ---------- */
+document.getElementById('sub').innerHTML =
+  `Lemon Gym, Raudondvario pl. 169b, Kaunas &middot; <b>${P.length} readings</b> at 10-minute intervals &middot; ` +
+  `${fmtDay(P[0])} ${P[0].t} &rarr; ${fmtDay(last)} ${last.t} (Europe/Vilnius)`;
+
+document.getElementById('ch1title').textContent =
+  `Every reading, ${fmtDay(P[0])} to ${fmtDay(last)}`;
+document.getElementById('tblsummary').innerHTML =
+  `Data table &mdash; all ${P.length} readings`;
+
+const trend = last.v > prev.v ? 'rising' : last.v < prev.v ? 'falling' : 'flat';
+const hoursSpan = ((M1 - M0) / 60).toFixed(1);
+const tiles = [
+  ['Busiest',  peak.v + '%', `${fmtDay(peak)} ${peak.t}`],
+  ['Quietest', low.v  + '%', `${fmtDay(low)} ${low.t}`],
+  ['Latest',   last.v + '%', `${last.t}, ${trend}`],
+  ['Coverage', P.length,     `${hoursSpan} hours logged`],
+];
+document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
+  `<div class="tile"><div class="label">${l}</div><div class="value">${v}</div><div class="meta">${m}</div></div>`
+).join('');
+
+/* ---------- Chart 1: full timeline ---------- */
+(function () {
+  const W=1000, H=360, ML=44, MR=18, MT=26, MB=44;
+  const YMAX = Math.max(10, Math.ceil((peak.v + 6) / 10) * 10);
+  const x = m => ML + (m - M0) / (M1 - M0) * (W - ML - MR);
+  const y = v => MT + (1 - v / YMAX) * (H - MT - MB);
+
+  const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img',
+    'aria-label':`Line chart of gym occupancy across ${P.length} readings, peaking at ${peak.v} percent and bottoming at ${low.v} percent.`});
+
+  const grad = el('linearGradient', {id:'g1', x1:'0', y1:'0', x2:'0', y2:'1'});
+  grad.appendChild(el('stop', {offset:'0%',  'stop-color':'var(--series-1)', 'stop-opacity':'0.20'}));
+  grad.appendChild(el('stop', {offset:'100%','stop-color':'var(--series-1)', 'stop-opacity':'0.02'}));
+  const defs = el('defs'); defs.appendChild(grad); svg.appendChild(defs);
+
+  /* overnight bands: 23:00 -> 06:00 of each night inside the range */
+  for (let base = -1440; base <= M1; base += 1440) {
+    const s = Math.max(base + 1380, M0), e = Math.min(base + 1800, M1);
+    if (e <= s) continue;
+    svg.appendChild(el('rect', {x:x(s), y:MT, width:x(e)-x(s), height:H-MT-MB, fill:'var(--night)'}));
+    if (x(e) - x(s) > 70) {
+      const bl = el('text', {x:(x(s)+x(e))/2, y:MT+14, 'text-anchor':'middle', class:'band-label'});
+      bl.textContent = 'OVERNIGHT'; svg.appendChild(bl);
+    }
+  }
+
+  const step = YMAX <= 40 ? 10 : 20;
+  for (let v = 0; v <= YMAX; v += step) {
+    svg.appendChild(el('line', {x1:ML, y1:y(v), x2:W-MR, y2:y(v), class: v===0 ? 'axisline' : 'gridline'}));
+    const t = el('text', {x:ML-9, y:y(v)+4, 'text-anchor':'end', class:'tick'});
+    t.textContent = v + '%'; svg.appendChild(t);
+  }
+
+  const tickStep = (M1 - M0) > 1500 ? 180 : 120;
+  for (let m = Math.ceil(M0/60)*60; m <= M1; m += tickStep) {
+    const t = el('text', {x:x(m), y:H-MB+18, 'text-anchor':'middle', class:'tick'});
+    t.textContent = fmtH(m); svg.appendChild(t);
+  }
+
+  DAYS.forEach((s,i) => {
+    if (i > 0) svg.appendChild(el('line', {x1:x(s.m0), y1:MT, x2:x(s.m0), y2:H-MB, class:'gridline'}));
+    const t = el('text', {x:(x(s.m0)+x(s.m1))/2, y:H-MB+34, 'text-anchor':'middle', class:'axis-title'});
+    t.textContent = s.label; svg.appendChild(t);
+  });
+
+  const d = P.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
+  svg.appendChild(el('path', {d: d + ` L ${x(M1).toFixed(1)} ${y(0)} L ${x(M0).toFixed(1)} ${y(0)} Z`, fill:'url(#g1)'}));
+  svg.appendChild(el('path', {d, class:'series-line', 'vector-effect':'non-scaling-stroke'}));
+
+  /* selective direct labels only: the peak and the floor */
+  [[peak, peak.v + '% peak', `${peak.w} ${peak.t}`, -18],
+   [low,  low.v  + '% floor', `${low.w} ${low.t}`,  -30]].forEach(([pt,lab,sub,dy]) => {
+    const cx = Math.min(Math.max(x(pt.m), ML+34), W-MR-34);
+    svg.appendChild(el('circle', {cx:x(pt.m), cy:y(pt.v), r:4.5, fill:'var(--series-1)',
+      stroke:'var(--surface-1)', 'stroke-width':2}));
+    const a = el('text', {x:cx, y:y(pt.v)+dy, 'text-anchor':'middle', class:'anno-label'});
+    a.textContent = lab; svg.appendChild(a);
+    const b = el('text', {x:cx, y:y(pt.v)+dy+13, 'text-anchor':'middle', class:'anno-sub'});
+    b.textContent = sub; svg.appendChild(b);
+  });
+
+  const cross = el('line', {y1:MT, y2:H-MB, class:'crosshair', opacity:0});
+  const dot = el('circle', {r:5, fill:'var(--series-1)', stroke:'var(--surface-1)', 'stroke-width':2, opacity:0});
+  svg.appendChild(cross); svg.appendChild(dot);
+  const host = document.getElementById('host1'), tip = document.getElementById('tip1');
+  host.insertBefore(svg, tip);
+
+  const move = ev => {
+    const r = svg.getBoundingClientRect();
+    const mx = (ev.clientX - r.left) / r.width * W;
+    if (mx < ML || mx > W-MR) { cross.setAttribute('opacity',0); dot.setAttribute('opacity',0); tip.style.opacity=0; return; }
+    let best = P[0], bd = 1e9;
+    for (const p of P) { const dd = Math.abs(x(p.m)-mx); if (dd < bd) { bd = dd; best = p; } }
+    cross.setAttribute('x1', x(best.m)); cross.setAttribute('x2', x(best.m)); cross.setAttribute('opacity',1);
+    dot.setAttribute('cx', x(best.m)); dot.setAttribute('cy', y(best.v)); dot.setAttribute('opacity',1);
+    tip.innerHTML = `<div class="tv">${best.v}%</div><div class="tt">${best.w} ${best.t}</div>`;
+    const px = x(best.m) / W * r.width;
+    tip.style.left = Math.min(Math.max(px - 34, 0), r.width - 92) + 'px';
+    tip.style.top = (y(best.v) / H * r.height - 54) + 'px';
+    tip.style.opacity = 1;
+  };
+  svg.addEventListener('mousemove', move);
+  svg.addEventListener('mouseleave', () => { cross.setAttribute('opacity',0); dot.setAttribute('opacity',0); tip.style.opacity=0; });
+})();
+
+/* ---------- Chart 2: hourly average ---------- */
+(function () {
+  const W=1000, H=250, ML=44, MR=18, MT=18, MB=40;
+  const YMAX = Math.max(10, Math.ceil((peak.v + 6) / 10) * 10);
+  const n = HR.length, bw = (W - ML - MR) / n;
+  const y = v => MT + (1 - v / YMAX) * (H - MT - MB);
+
+  const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img',
+    'aria-label':`Bar chart of average occupancy per clock hour across ${n} hours.`});
+
+  const step = YMAX <= 40 ? 10 : 20;
+  for (let v = 0; v <= YMAX; v += step) {
+    svg.appendChild(el('line', {x1:ML, y1:y(v), x2:W-MR, y2:y(v), class: v===0 ? 'axisline' : 'gridline'}));
+    const t = el('text', {x:ML-9, y:y(v)+4, 'text-anchor':'end', class:'tick'});
+    t.textContent = v + '%'; svg.appendChild(t);
+  }
+
+  const labelEvery = n > 16 ? 2 : 1;
+  HR.forEach((h,i) => {
+    const bx = ML + i*bw + 1, w = bw - 2;              /* 2px surface gap */
+    svg.appendChild(el('rect', {x:bx, y:y(h.avg), width:w,
+      height:Math.max(y(0)-y(h.avg), 2), rx:4, class:'bar'}));
+    if (i % labelEvery === 0) {
+      const t = el('text', {x:bx + w/2, y:H-MB+18, 'text-anchor':'middle', class:'tick'});
+      t.textContent = fmtH(h.m); svg.appendChild(t);
+    }
+  });
+
+  const host = document.getElementById('host2'), tip = document.getElementById('tip2');
+  host.insertBefore(svg, tip);
+  svg.addEventListener('mousemove', ev => {
+    const r = svg.getBoundingClientRect();
+    const i = Math.floor(((ev.clientX - r.left) / r.width * W - ML) / bw);
+    if (i < 0 || i >= n) { tip.style.opacity = 0; return; }
+    const h = HR[i];
+    tip.innerHTML = `<div class="tv">${h.avg}%</div><div class="tt">${fmtH(h.m)} &middot; ${h.n} readings &middot; ${h.min}–${h.max}%</div>`;
+    const px = (ML + i*bw + bw/2) / W * r.width;
+    tip.style.left = Math.min(Math.max(px - 70, 0), r.width - 168) + 'px';
+    tip.style.top = (y(h.avg) / H * r.height - 56) + 'px';
+    tip.style.opacity = 1;
+  });
+  svg.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+})();
+
+/* ---------- Table ---------- */
+(function () {
+  let p0 = null;
+  document.querySelector('#tbl tbody').innerHTML = P.map(p => {
+    const d = p0 === null ? '' : (p.v > p0 ? '+' + (p.v-p0) : (p.v < p0 ? (p.v-p0) : '='));
+    p0 = p.v;
+    return `<tr><td>${p.w}</td><td>${p.t}</td><td class="num">${p.v}%</td><td class="num">${d}</td></tr>`;
+  }).join('');
+})();
+</script>

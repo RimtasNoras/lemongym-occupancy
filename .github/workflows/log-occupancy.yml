@@ -1,0 +1,43 @@
+name: Log occupancy
+
+# Runs off-machine, so coverage survives the Mac being asleep or off.
+# GitHub's scheduler is best-effort and often runs a few minutes late; this is
+# a reliability floor under the 10-minute local launchd job, not a replacement.
+on:
+  schedule:
+    - cron: '*/30 * * * *'   # every 30 min (UTC); ~1,490 runner-min/month
+  workflow_dispatch:          # allows a manual run from the Actions tab
+
+permissions:
+  contents: write
+
+concurrency:
+  group: log-occupancy
+  cancel-in-progress: false
+
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch and append reading
+        run: ./log-occupancy.sh occupancy-cloud.csv
+
+      - name: Commit if changed
+        run: |
+          if git diff --quiet -- occupancy-cloud.csv; then
+            echo "No change, nothing to commit."
+            exit 0
+          fi
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add occupancy-cloud.csv
+          git commit -m "Cloud reading $(TZ=Europe/Vilnius date '+%Y-%m-%d %H:%M')"
+          # Another run may have pushed while this one was fetching.
+          for i in 1 2 3; do
+            git pull --rebase origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep 5
+          done
+          echo "Could not push after 3 attempts" >&2
+          exit 1
