@@ -104,6 +104,20 @@
   .legend i { width: 22px; height: 0; border-top-width: 2px; display: inline-block; }
   .legend .m { border-top-style: solid;  border-top-color: var(--series-1); }
   .legend .e { border-top-style: dashed; border-top-color: var(--estimate); }
+  .ctrls { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 12px; }
+  .ctrls button {
+    font: inherit; font-size: 0.78rem; font-variant-numeric: tabular-nums;
+    padding: 3px 11px; border-radius: 999px; cursor: pointer;
+    color: var(--text-secondary); background: transparent;
+    border: 1px solid var(--border);
+  }
+  .ctrls button:hover { color: var(--text-primary); border-color: var(--axis); }
+  .ctrls button.on {
+    color: var(--surface-1); background: var(--series-1); border-color: var(--series-1);
+  }
+  .ctrls button:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
+  .ctrls .hint { font-size: 0.74rem; color: var(--text-muted); margin-left: 4px; }
+  .zoom-sel { fill: var(--series-1); opacity: 0.14; }
   .crosshair { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
 
   .tip {
@@ -159,6 +173,13 @@
       <span><i class="m"></i>Measured</span>
       <span><i class="e"></i>Estimated &mdash; logger was down, not recorded</span>
     </p>
+    <div class="ctrls" id="ranges">
+      <button type="button" data-h="6">6h</button>
+      <button type="button" data-h="24">24h</button>
+      <button type="button" data-h="72">3d</button>
+      <button type="button" data-h="0" class="on">All</button>
+      <span class="hint">or drag across the chart to zoom &middot; double-click to reset</span>
+    </div>
     <div class="chart-scroll"><div class="plot-host" id="host1"><div class="tip" id="tip1"></div></div></div>
   </figure>
 
@@ -230,110 +251,184 @@ document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
   `<div class="tile"><div class="label">${l}</div><div class="value">${v}</div><div class="meta">${m}</div></div>`
 ).join('');
 
-/* ---------- Chart 1: full timeline ---------- */
+/* ---------- Chart 1: full timeline (zoomable) ---------- */
 (function () {
   const W=1000, H=360, ML=44, MR=18, MT=26, MB=44;
   const YMAX = Math.max(10, Math.ceil((peak.v + 6) / 10) * 10);
-  const x = m => ML + (m - M0) / (M1 - M0) * (W - ML - MR);
+  const MIN_SPAN = 30;                       /* never zoom tighter than 30 min */
+
+  let V0 = M0, V1 = M1;                      /* current view window */
+  const x = m => ML + (m - V0) / (V1 - V0) * (W - ML - MR);
   const y = v => MT + (1 - v / YMAX) * (H - MT - MB);
+  const inView = m => m >= V0 && m <= V1;
 
   const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img',
-    'aria-label':`Line chart of gym occupancy across ${P.length} readings, peaking at ${peak.v} percent and bottoming at ${low.v} percent.`});
-
-  const grad = el('linearGradient', {id:'g1', x1:'0', y1:'0', x2:'0', y2:'1'});
-  grad.appendChild(el('stop', {offset:'0%',  'stop-color':'var(--series-1)', 'stop-opacity':'0.20'}));
-  grad.appendChild(el('stop', {offset:'100%','stop-color':'var(--series-1)', 'stop-opacity':'0.02'}));
-  const defs = el('defs'); defs.appendChild(grad); svg.appendChild(defs);
-
-  /* overnight bands: 23:00 -> 06:00 of each night inside the range */
-  for (let base = -1440; base <= M1; base += 1440) {
-    const s = Math.max(base + 1380, M0), e = Math.min(base + 1800, M1);
-    if (e <= s) continue;
-    svg.appendChild(el('rect', {x:x(s), y:MT, width:x(e)-x(s), height:H-MT-MB, fill:'var(--night)'}));
-    if (x(e) - x(s) > 70) {
-      const bl = el('text', {x:(x(s)+x(e))/2, y:MT+14, 'text-anchor':'middle', class:'band-label'});
-      bl.textContent = 'OVERNIGHT'; svg.appendChild(bl);
-    }
-  }
-
-  const step = YMAX <= 40 ? 10 : 20;
-  for (let v = 0; v <= YMAX; v += step) {
-    svg.appendChild(el('line', {x1:ML, y1:y(v), x2:W-MR, y2:y(v), class: v===0 ? 'axisline' : 'gridline'}));
-    const t = el('text', {x:ML-9, y:y(v)+4, 'text-anchor':'end', class:'tick'});
-    t.textContent = v + '%'; svg.appendChild(t);
-  }
-
-  const tickStep = (M1 - M0) > 1500 ? 180 : 120;
-  for (let m = Math.ceil(M0/60)*60; m <= M1; m += tickStep) {
-    const t = el('text', {x:x(m), y:H-MB+18, 'text-anchor':'middle', class:'tick'});
-    t.textContent = fmtH(m); svg.appendChild(t);
-  }
-
-  DAYS.forEach((s,i) => {
-    if (i > 0) svg.appendChild(el('line', {x1:x(s.m0), y1:MT, x2:x(s.m0), y2:H-MB, class:'gridline'}));
-    const t = el('text', {x:(x(s.m0)+x(s.m1))/2, y:H-MB+34, 'text-anchor':'middle', class:'axis-title'});
-    t.textContent = s.label; svg.appendChild(t);
-  });
-
-  /* Break the stroke wherever readings stop for more than 45 min: a straight
-     line across a logger outage would read as measured data, which it is not. */
-  const GAP = 45;
-  const d = P.map((p,i) =>
-    ((i === 0 || p.m - P[i-1].m > GAP) ? 'M' : 'L') +
-    x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
-  /* One closed area per contiguous run, so gaps stay empty under the curve. */
-  let run = [];
-  const runs = [];
-  P.forEach((p,i) => {
-    if (i > 0 && p.m - P[i-1].m > GAP) { runs.push(run); run = []; }
-    run.push(p);
-  });
-  runs.push(run);
-  runs.filter(r => r.length > 1).forEach(r => {
-    const seg = r.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ')
-      + ` L ${x(r[r.length-1].m).toFixed(1)} ${y(0)} L ${x(r[0].m).toFixed(1)} ${y(0)} Z`;
-    svg.appendChild(el('path', {d: seg, fill:'url(#g1)'}));
-  });
-  (DATA.estimates || []).forEach(seg => {
-    const sd = seg.pts.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
-    svg.appendChild(el('path', {d: sd, class:'estimate-line',
-      'vector-effect':'non-scaling-stroke'}));
-  });
-  svg.appendChild(el('path', {d, class:'series-line', 'vector-effect':'non-scaling-stroke'}));
-
-  /* selective direct labels only: the peak and the floor */
-  [[peak, peak.v + '% peak', `${peak.w} ${peak.t}`, -18],
-   [low,  low.v  + '% floor', `${low.w} ${low.t}`,  -30]].forEach(([pt,lab,sub,dy]) => {
-    const cx = Math.min(Math.max(x(pt.m), ML+34), W-MR-34);
-    svg.appendChild(el('circle', {cx:x(pt.m), cy:y(pt.v), r:4.5, fill:'var(--series-1)',
-      stroke:'var(--surface-1)', 'stroke-width':2}));
-    const a = el('text', {x:cx, y:y(pt.v)+dy, 'text-anchor':'middle', class:'anno-label'});
-    a.textContent = lab; svg.appendChild(a);
-    const b = el('text', {x:cx, y:y(pt.v)+dy+13, 'text-anchor':'middle', class:'anno-sub'});
-    b.textContent = sub; svg.appendChild(b);
-  });
-
-  const cross = el('line', {y1:MT, y2:H-MB, class:'crosshair', opacity:0});
-  const dot = el('circle', {r:5, fill:'var(--series-1)', stroke:'var(--surface-1)', 'stroke-width':2, opacity:0});
-  svg.appendChild(cross); svg.appendChild(dot);
+    'aria-label':`Line chart of gym occupancy across ${P.length} readings, peaking at ${peak.v} percent and bottoming at ${low.v} percent. Drag to zoom.`});
   const host = document.getElementById('host1'), tip = document.getElementById('tip1');
   host.insertBefore(svg, tip);
 
-  /* Hover covers estimated points too -- they are readable, but always
-     labelled as estimates and drawn with the estimate colour, never passed
-     off as a measurement. */
+  const GAP = 45;
   const HOVER = P.map(p => ({...p, est:false}));
-  (DATA.estimates || []).forEach(seg => seg.pts.forEach(p => {
-    if (!p.real) HOVER.push({...p, est:true});
-  }));
+  (DATA.estimates || []).forEach(seg => seg.pts.forEach(p => { if (!p.real) HOVER.push({...p, est:true}); }));
   HOVER.sort((a,b) => a.m - b.m);
 
-  const move = ev => {
+  let cross, dot, sel;
+
+  function render() {
+    while (svg.firstChild) svg.removeChild(svg.firstChild);
+
+    const defs = el('defs');
+    const grad = el('linearGradient', {id:'g1', x1:'0', y1:'0', x2:'0', y2:'1'});
+    grad.appendChild(el('stop', {offset:'0%',  'stop-color':'var(--series-1)', 'stop-opacity':'0.20'}));
+    grad.appendChild(el('stop', {offset:'100%','stop-color':'var(--series-1)', 'stop-opacity':'0.02'}));
+    defs.appendChild(grad);
+    const clip = el('clipPath', {id:'plotclip'});
+    clip.appendChild(el('rect', {x:ML, y:MT, width:W-ML-MR, height:H-MT-MB}));
+    defs.appendChild(clip);
+    svg.appendChild(defs);
+
+    /* overnight bands, clipped to the visible window */
+    for (let base = -1440; base <= V1; base += 1440) {
+      const s0 = Math.max(base + 1380, V0), e0 = Math.min(base + 1800, V1);
+      if (e0 <= s0) continue;
+      svg.appendChild(el('rect', {x:x(s0), y:MT, width:x(e0)-x(s0), height:H-MT-MB, fill:'var(--night)'}));
+      if (x(e0) - x(s0) > 70) {
+        const bl = el('text', {x:(x(s0)+x(e0))/2, y:MT+14, 'text-anchor':'middle', class:'band-label'});
+        bl.textContent = 'OVERNIGHT'; svg.appendChild(bl);
+      }
+    }
+
+    const step = YMAX <= 40 ? 10 : 20;
+    for (let v = 0; v <= YMAX; v += step) {
+      svg.appendChild(el('line', {x1:ML, y1:y(v), x2:W-MR, y2:y(v), class: v===0 ? 'axisline' : 'gridline'}));
+      const t = el('text', {x:ML-9, y:y(v)+4, 'text-anchor':'end', class:'tick'});
+      t.textContent = v + '%'; svg.appendChild(t);
+    }
+
+    /* tick density follows the zoom level */
+    const span = V1 - V0;
+    const tickStep = span > 2880 ? 360 : span > 1440 ? 180 : span > 480 ? 60 : span > 180 ? 30 : 10;
+    for (let m = Math.ceil(V0/tickStep)*tickStep; m <= V1; m += tickStep) {
+      const t = el('text', {x:x(m), y:H-MB+18, 'text-anchor':'middle', class:'tick'});
+      t.textContent = tickStep < 60
+        ? `${String(Math.floor(m/60)%24).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`
+        : fmtH(m);
+      svg.appendChild(t);
+    }
+
+    DAYS.forEach((sg,i) => {
+      if (sg.m1 < V0 || sg.m0 > V1) return;
+      if (i > 0 && inView(sg.m0)) svg.appendChild(el('line', {x1:x(sg.m0), y1:MT, x2:x(sg.m0), y2:H-MB, class:'gridline'}));
+      const cx = (Math.max(x(sg.m0), ML) + Math.min(x(sg.m1), W-MR)) / 2;
+      const t = el('text', {x:cx, y:H-MB+34, 'text-anchor':'middle', class:'axis-title'});
+      t.textContent = sg.label; svg.appendChild(t);
+    });
+
+    const g = el('g', {'clip-path':'url(#plotclip)'});
+
+    let run = [];
+    const runs = [];
+    P.forEach((p,i) => {
+      if (i > 0 && p.m - P[i-1].m > GAP) { runs.push(run); run = []; }
+      run.push(p);
+    });
+    runs.push(run);
+    runs.filter(r => r.length > 1).forEach(r => {
+      const seg = r.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ')
+        + ` L ${x(r[r.length-1].m).toFixed(1)} ${y(0)} L ${x(r[0].m).toFixed(1)} ${y(0)} Z`;
+      g.appendChild(el('path', {d: seg, fill:'url(#g1)'}));
+    });
+    (DATA.estimates || []).forEach(seg => {
+      const sd = seg.pts.map((p,i) => (i?'L':'M') + x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
+      g.appendChild(el('path', {d: sd, class:'estimate-line', 'vector-effect':'non-scaling-stroke'}));
+    });
+    const d = P.map((p,i) =>
+      ((i === 0 || p.m - P[i-1].m > GAP) ? 'M' : 'L') +
+      x(p.m).toFixed(1) + ' ' + y(p.v).toFixed(1)).join(' ');
+    g.appendChild(el('path', {d, class:'series-line', 'vector-effect':'non-scaling-stroke'}));
+
+    /* markers appear once the window is tight enough for them to read */
+    if (span <= 720) {
+      P.forEach(p => { if (inView(p.m))
+        g.appendChild(el('circle', {cx:x(p.m), cy:y(p.v), r:2.6, fill:'var(--series-1)'})); });
+    }
+    svg.appendChild(g);
+
+    /* peak / floor labels only while they are actually on screen */
+    [[peak, peak.v + '% peak', `${peak.w} ${peak.t}`, -18],
+     [low,  low.v  + '% floor', `${low.w} ${low.t}`,  -30]].forEach(([pt,lab,sub,dy]) => {
+      if (!inView(pt.m)) return;
+      const cx = Math.min(Math.max(x(pt.m), ML+34), W-MR-34);
+      svg.appendChild(el('circle', {cx:x(pt.m), cy:y(pt.v), r:4.5, fill:'var(--series-1)',
+        stroke:'var(--surface-1)', 'stroke-width':2}));
+      const a1 = el('text', {x:cx, y:y(pt.v)+dy, 'text-anchor':'middle', class:'anno-label'});
+      a1.textContent = lab; svg.appendChild(a1);
+      const b1 = el('text', {x:cx, y:y(pt.v)+dy+13, 'text-anchor':'middle', class:'anno-sub'});
+      b1.textContent = sub; svg.appendChild(b1);
+    });
+
+    sel = el('rect', {y:MT, height:H-MT-MB, width:0, x:0, class:'zoom-sel', opacity:0});
+    cross = el('line', {y1:MT, y2:H-MB, class:'crosshair', opacity:0});
+    dot = el('circle', {r:5, fill:'var(--series-1)', stroke:'var(--surface-1)', 'stroke-width':2, opacity:0});
+    svg.appendChild(sel); svg.appendChild(cross); svg.appendChild(dot);
+  }
+
+  function setView(a, b) {
+    if (b - a < MIN_SPAN) return;
+    V0 = Math.max(a, M0); V1 = Math.min(b, M1);
+    render();
+  }
+  function resetView() {
+    V0 = M0; V1 = M1; render();
+    document.querySelectorAll('#ranges button').forEach(x2 => x2.classList.toggle('on', x2.dataset.h === '0'));
+  }
+
+  document.getElementById('ranges').addEventListener('click', ev => {
+    const btn = ev.target.closest('button'); if (!btn) return;
+    document.querySelectorAll('#ranges button').forEach(x2 => x2.classList.toggle('on', x2 === btn));
+    const h = +btn.dataset.h;
+    if (!h) { V0 = M0; V1 = M1; } else { V1 = M1; V0 = Math.max(M0, M1 - h*60); }
+    render();
+  });
+
+  const toM = ev => {
     const r = svg.getBoundingClientRect();
     const mx = (ev.clientX - r.left) / r.width * W;
+    return V0 + (Math.min(Math.max(mx, ML), W-MR) - ML) / (W-ML-MR) * (V1 - V0);
+  };
+
+  let dragFrom = null;
+  svg.addEventListener('mousedown', ev => { dragFrom = toM(ev); sel.setAttribute('opacity',1); });
+  svg.addEventListener('dblclick', resetView);
+  window.addEventListener('mouseup', ev => {
+    if (dragFrom === null) return;
+    const to = toM(ev), a = Math.min(dragFrom, to), b = Math.max(dragFrom, to);
+    dragFrom = null;
+    if (b - a >= MIN_SPAN) {
+      document.querySelectorAll('#ranges button').forEach(x2 => x2.classList.remove('on'));
+      setView(a, b);
+    } else if (sel) { sel.setAttribute('opacity',0); sel.setAttribute('width',0); }
+  });
+
+  svg.addEventListener('mousemove', ev => {
+    const r = svg.getBoundingClientRect();
+    const mx = (ev.clientX - r.left) / r.width * W;
+
+    if (dragFrom !== null) {                       /* drawing a zoom selection */
+      const xa = x(dragFrom), xb = Math.min(Math.max(mx, ML), W-MR);
+      sel.setAttribute('x', Math.min(xa, xb));
+      sel.setAttribute('width', Math.abs(xb - xa));
+      tip.style.opacity = 0; cross.setAttribute('opacity',0); dot.setAttribute('opacity',0);
+      return;
+    }
+
     if (mx < ML || mx > W-MR) { cross.setAttribute('opacity',0); dot.setAttribute('opacity',0); tip.style.opacity=0; return; }
-    let best = HOVER[0], bd = 1e9;
-    for (const p of HOVER) { const dd = Math.abs(x(p.m)-mx); if (dd < bd) { bd = dd; best = p; } }
+    let best = null, bd = 1e9;
+    for (const p of HOVER) {
+      if (!inView(p.m)) continue;
+      const dd = Math.abs(x(p.m)-mx); if (dd < bd) { bd = dd; best = p; }
+    }
+    if (!best) { tip.style.opacity=0; return; }
     cross.setAttribute('x1', x(best.m)); cross.setAttribute('x2', x(best.m)); cross.setAttribute('opacity',1);
     dot.setAttribute('cx', x(best.m)); dot.setAttribute('cy', y(best.v));
     dot.setAttribute('fill', best.est ? 'var(--estimate)' : 'var(--series-1)');
@@ -346,9 +441,13 @@ document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
     tip.style.left = Math.min(Math.max(px - 34, 0), r.width - 92) + 'px';
     tip.style.top = (y(best.v) / H * r.height - (best.est ? 74 : 54)) + 'px';
     tip.style.opacity = 1;
-  };
-  svg.addEventListener('mousemove', move);
-  svg.addEventListener('mouseleave', () => { cross.setAttribute('opacity',0); dot.setAttribute('opacity',0); tip.style.opacity=0; });
+  });
+  svg.addEventListener('mouseleave', () => {
+    if (dragFrom !== null) return;
+    cross.setAttribute('opacity',0); dot.setAttribute('opacity',0); tip.style.opacity=0;
+  });
+
+  render();
 })();
 
 /* ---------- Chart 2: hourly average ---------- */
