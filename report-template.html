@@ -117,6 +117,15 @@
   }
   .ctrls button:focus-visible { outline: 2px solid var(--series-1); outline-offset: 2px; }
   .ctrls .hint { font-size: 0.74rem; color: var(--text-muted); margin-left: 4px; }
+  .cell { stroke: var(--surface-1); stroke-width: 2; }
+  .cell-empty { fill: none; stroke: var(--grid); stroke-width: 1; }
+  .cell-txt { font-size: 10px; font-variant-numeric: tabular-nums; pointer-events: none; }
+  .row-lbl { fill: var(--text-secondary); font-size: 11px; font-weight: 600; }
+  .win-bar { fill: var(--series-1); }
+  .win-bar.pick { fill: var(--series-1); }
+  .win-lbl { fill: var(--text-secondary); font-size: 11px; font-variant-numeric: tabular-nums; }
+  .win-val { fill: var(--text-primary); font-size: 11px; font-weight: 620; font-variant-numeric: tabular-nums; }
+  .scale-cap { fill: var(--text-muted); font-size: 10px; }
   .zoom-sel { fill: var(--series-1); opacity: 0.14; }
   .crosshair { stroke: var(--axis); stroke-width: 1; stroke-dasharray: 3 3; }
 
@@ -165,6 +174,18 @@
   </header>
 
   <div class="tiles" id="tiles"></div>
+
+  <figure class="card">
+    <h2>When is it quiet?</h2>
+    <p class="note" id="heatnote">Average occupancy by day and hour. Darker means busier.</p>
+    <div class="chart-scroll"><div class="plot-host" id="host3"><div class="tip" id="tip3"></div></div></div>
+  </figure>
+
+  <figure class="card">
+    <h2>Best 2-hour windows</h2>
+    <p class="note" id="winnote">Every 2-hour slot that fits inside opening hours, ranked quietest first.</p>
+    <div class="chart-scroll"><div class="plot-host" id="host4"><div class="tip" id="tip4"></div></div></div>
+  </figure>
 
   <figure class="card">
     <h2 id="ch1title">Every reading</h2>
@@ -250,6 +271,144 @@ const tiles = [
 document.getElementById('tiles').innerHTML = tiles.map(([l,v,m]) =>
   `<div class="tile"><div class="label">${l}</div><div class="value">${v}</div><div class="meta">${m}</div></div>`
 ).join('');
+
+/* ---------- Chart 3: day x hour heatmap ---------- */
+(function () {
+  const HD = DATA.heatDays || [], HEAT = DATA.heat || {};
+  if (!HD.length) return;
+  const H0 = DATA.openFrom, H1 = DATA.openTo;          /* only usable hours */
+  const hours = []; for (let h = H0; h < H1; h++) hours.push(h);
+
+  const ML=52, MR=16, MT=26, MB=30, CH=30;
+  const W=1000, H=MT + HD.length*CH + MB;
+  const cw = (W - ML - MR) / hours.length;
+
+  /* one hue, opacity ramp -> reads light-to-dark in BOTH themes without
+     needing a separate dark ramp, since it composites onto the surface. */
+  const vals = HD.flatMap(w => hours.map(h => HEAT[w]?.[h]?.avg).filter(v => v != null));
+  const VMAX = Math.max(...vals, 1);
+  const op = v => 0.10 + 0.90 * (v / VMAX);
+
+  const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img',
+    'aria-label':`Heatmap of average occupancy for each day and hour between ${H0}:00 and ${H1}:00.`});
+
+  hours.forEach((h,i) => {
+    if (i % 2) return;
+    const t = el('text', {x:ML + i*cw + cw/2, y:MT-10, 'text-anchor':'middle', class:'tick'});
+    t.textContent = String(h).padStart(2,'0'); svg.appendChild(t);
+  });
+
+  HD.forEach((w,r) => {
+    const t = el('text', {x:ML-10, y:MT + r*CH + CH/2 + 4, 'text-anchor':'end', class:'row-lbl'});
+    t.textContent = w; svg.appendChild(t);
+    hours.forEach((h,i) => {
+      const c = HEAT[w]?.[h];
+      const x0 = ML + i*cw, y0 = MT + r*CH;
+      if (!c) {
+        svg.appendChild(el('rect', {x:x0+1, y:y0+1, width:cw-2, height:CH-2, rx:3, class:'cell-empty'}));
+        return;
+      }
+      svg.appendChild(el('rect', {x:x0, y:y0, width:cw, height:CH, rx:3, class:'cell',
+        fill:'var(--series-1)', 'fill-opacity':op(c.avg).toFixed(3),
+        'data-w':w, 'data-h':h}));
+      if (cw > 30) {
+        const t2 = el('text', {x:x0+cw/2, y:y0+CH/2+4, 'text-anchor':'middle', class:'cell-txt',
+          fill: op(c.avg) > 0.55 ? 'var(--surface-1)' : 'var(--text-primary)'});
+        t2.textContent = Math.round(c.avg); svg.appendChild(t2);
+      }
+    });
+  });
+
+  const cap = el('text', {x:ML, y:H-10, class:'scale-cap'});
+  cap.textContent = `pale = empty · solid = ${Math.round(VMAX)}% · outlined = no readings yet`;
+  svg.appendChild(cap);
+
+  const host = document.getElementById('host3'), tip = document.getElementById('tip3');
+  host.insertBefore(svg, tip);
+  svg.addEventListener('mousemove', ev => {
+    const cell = ev.target.closest('rect.cell');
+    if (!cell) { tip.style.opacity = 0; return; }
+    const w = cell.dataset.w, h = +cell.dataset.h, c = HEAT[w][h];
+    tip.classList.remove('est');
+    tip.innerHTML = `<div class="tv">${c.avg}%</div><div class="tt">${w} ${String(h).padStart(2,'0')}:00 · ${c.n} readings</div>`;
+    const r = svg.getBoundingClientRect();
+    tip.style.left = Math.min(Math.max((+cell.getAttribute('x') + cw/2)/W*r.width - 60, 0), r.width-140) + 'px';
+    tip.style.top  = ((+cell.getAttribute('y'))/H*r.height - 52) + 'px';
+    tip.style.opacity = 1;
+  });
+  svg.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+
+  const dn = DATA.dayN || {};
+  const missing = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'].filter(w => !dn[w]);
+  if (missing.length) {
+    document.getElementById('heatnote').innerHTML +=
+      ` <b>No data yet for ${missing.join(', ')}</b> &mdash; those rows are omitted.`;
+  }
+})();
+
+/* ---------- Chart 4: ranked 2-hour windows ---------- */
+(function () {
+  /* One row per day -- that day's own quietest window. Ranking the raw list
+     would just show Sunday nine times over, which answers nothing when you
+     need to pick several different days. */
+  const byDay = new Map();
+  (DATA.windows || []).forEach(w => { if (!byDay.has(w.w)) byDay.set(w.w, w); });
+  const WIN = [...byDay.values()].sort((a,b) => a.avg - b.avg);
+  if (!WIN.length) return;
+  const ML=132, MR=54, MT=16, MB=28, RH=34;
+  const W=1000, H=MT + WIN.length*RH + MB;
+  const VMAX = Math.max(...WIN.map(w => w.worst), 10);
+  const x = v => ML + v / VMAX * (W - ML - MR);
+  const fmt = m => `${String(Math.floor(m/60)).padStart(2,'0')}:${String(m%60).padStart(2,'0')}`;
+
+  const svg = el('svg', {viewBox:`0 0 ${W} ${H}`, role:'img',
+    'aria-label':`The ${WIN.length} quietest two-hour windows, ranked by average occupancy.`});
+
+  for (let v = 0; v <= VMAX; v += 10) {
+    svg.appendChild(el('line', {x1:x(v), y1:MT, x2:x(v), y2:H-MB, class:'gridline'}));
+    const t = el('text', {x:x(v), y:H-MB+16, 'text-anchor':'middle', class:'tick'});
+    t.textContent = v + '%'; svg.appendChild(t);
+  }
+
+  /* one pick per day: the best window that day offers */
+  const PICKS = 4;                       /* how many days actually get trained */
+  WIN.forEach((w,i) => {
+    const y0 = MT + i*RH, best = i < PICKS;
+    const lbl = el('text', {x:ML-10, y:y0+RH/2+4, 'text-anchor':'end', class:'win-lbl'});
+    lbl.textContent = `${w.w} ${fmt(w.start)}-${fmt(w.start+120)}`;
+    if (best) { lbl.setAttribute('class','win-lbl'); lbl.setAttribute('font-weight','700');
+                lbl.setAttribute('fill','var(--text-primary)'); }
+    svg.appendChild(lbl);
+
+    /* faint bar to the window's worst moment, solid bar to its average */
+    svg.appendChild(el('rect', {x:ML, y:y0+5, width:Math.max(x(w.worst)-ML,1), height:RH-12, rx:4,
+      fill:'var(--series-1)', 'fill-opacity':0.18}));
+    svg.appendChild(el('rect', {x:ML, y:y0+5, width:Math.max(x(w.avg)-ML,1), height:RH-12, rx:4,
+      class:'win-bar', 'fill-opacity': best ? 1 : 0.55, 'data-i':i}));
+
+    const v = el('text', {x:x(w.worst)+8, y:y0+RH/2+4, class:'win-val'});
+    v.textContent = w.avg + '%'; svg.appendChild(v);
+  });
+
+  const host = document.getElementById('host4'), tip = document.getElementById('tip4');
+  host.insertBefore(svg, tip);
+  svg.addEventListener('mousemove', ev => {
+    const b = ev.target.closest('rect.win-bar');
+    if (!b) { tip.style.opacity = 0; return; }
+    const w = WIN[+b.dataset.i];
+    tip.classList.remove('est');
+    tip.innerHTML = `<div class="tv">${w.avg}%</div><div class="tt">${w.w} ${fmt(w.start)}-${fmt(w.start+120)} · worst ${w.worst}% · ${w.n} readings</div>`;
+    const r = svg.getBoundingClientRect();
+    tip.style.left = Math.min(ML/W*r.width, r.width-210) + 'px';
+    tip.style.top  = ((+b.getAttribute('y'))/H*r.height - 52) + 'px';
+    tip.style.opacity = 1;
+  });
+  svg.addEventListener('mouseleave', () => { tip.style.opacity = 0; });
+
+  document.getElementById('winnote').innerHTML =
+    'Each day&rsquo;s own quietest 2-hour slot inside opening hours, ranked. Solid bar is the window average; ' +
+    'the pale bar behind it is its busiest moment. The top ' + PICKS + ' are highlighted.';
+})();
 
 /* ---------- Chart 1: full timeline (zoomable) ---------- */
 (function () {

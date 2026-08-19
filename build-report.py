@@ -82,7 +82,47 @@ for a, b in zip(points, points[1:]):
     seg.append({'m': b['m'], 'v': b['v'], 'real': True})
     segments.append({'pts': seg, 'mins': span})
 
-data = json.dumps({'points': points, 'hourly': hourly, 'estimates': segments},
+# ---- decision views: when is it actually quiet? ----------------------------
+# Built from MEASURED readings only -- never the estimates -- because these
+# drive a real choice about when to train.
+WD = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun']
+OPEN_FROM, OPEN_TO = 9, 23          # hours the gym can be used
+SESSION = 120                        # minutes per workout
+
+cell = collections.defaultdict(list)          # (weekday, hour) -> values
+minute = collections.defaultdict(list)        # (weekday, minute-of-day) -> values
+day_n = collections.Counter()
+for r, pt in zip(rows, points):
+    w = pt['w']
+    hh, mm = int(pt['t'][:2]), int(pt['t'][3:])
+    cell[(w, hh)].append(pt['v'])
+    minute[(w, hh*60+mm)].append(pt['v'])
+    day_n[w] += 1
+
+heat = {w: {h: {'avg': round(sum(cell[(w,h)])/len(cell[(w,h)]), 1), 'n': len(cell[(w,h)])}
+            for h in range(24) if cell.get((w,h))}
+        for w in WD}
+heat_days = [w for w in WD if day_n[w] > 0]
+
+# every 2-hour window that fits inside opening hours, per day
+windows = []
+for w in WD:
+    if day_n[w] < 40:                # too little data to rank honestly
+        continue
+    prof = {m: sum(v)/len(v) for (ww, m), v in minute.items() if ww == w}
+    for start in range(OPEN_FROM*60, OPEN_TO*60 - SESSION + 1, 30):
+        vals = [v for m, v in prof.items() if start <= m < start + SESSION]
+        if len(vals) < 8:
+            continue
+        windows.append({'w': w, 'start': start,
+                        'avg': round(sum(vals)/len(vals), 1),
+                        'worst': round(max(vals)),
+                        'n': len(vals)})
+windows.sort(key=lambda x: x['avg'])
+
+data = json.dumps({'points': points, 'hourly': hourly, 'estimates': segments,
+                   'heat': heat, 'heatDays': heat_days, 'dayN': dict(day_n),
+                   'windows': windows, 'openFrom': OPEN_FROM, 'openTo': OPEN_TO},
                   separators=(',', ':'))
 
 tpl = open(os.path.join(HERE, 'report-template.html')).read()
