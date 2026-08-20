@@ -727,7 +727,12 @@ date,time,weekday,club,occupancy_percent
 2026-08-19,21:03,Wed,Raudondvaris,60
 2026-08-19,22:06,Wed,Raudondvaris,46
 2026-08-19,22:14,Wed,Raudondvaris,47
+2026-08-19,22:18,Wed,Raudondvaris,45
+2026-08-19,22:28,Wed,Raudondvaris,42
+2026-08-19,22:38,Wed,Raudondvaris,37
 2026-08-19,22:43,Wed,Raudondvaris,32
+2026-08-19,22:48,Wed,Raudondvaris,29
+2026-08-19,22:58,Wed,Raudondvaris,26
 2026-08-19,22:59,Wed,Raudondvaris,26
 2026-08-19,23:55,Wed,Raudondvaris,16
 2026-08-19,23:58,Wed,Raudondvaris,16
@@ -744,4 +749,6 @@ date,time,weekday,club,occupancy_percent
 2026-08-20,06:14,Thu,Raudondvaris,8
 2026-08-20,06:25,Thu,Raudondvaris,9
 2026-08-20,08:07,Thu,Raudondvaris,20
+2026-08-20,08:15,Thu,Raudondvaris,20
 2026-08-20,08:16,Thu,Raudondvaris,20
+2026-08-20,08:25,Thu,Raudondvaris,22
