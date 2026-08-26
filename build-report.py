@@ -12,6 +12,16 @@ import csv, json, collections, datetime, os
 HERE = os.path.dirname(os.path.abspath(__file__))
 
 rows = list(csv.DictReader(open(os.path.join(HERE, 'occupancy.csv'))))
+
+# The feed reports exactly 100% for a club that is closed or unavailable -- the
+# same value it shows for clubs that have not opened yet. Real occupancy ramps;
+# these appear as a 0 -> 100 -> 0 step (e.g. Sun 23 Aug 05:03-06:03, early-morning
+# maintenance). Treated as missing, not as a full gym. Left in occupancy.csv so
+# the raw record stays intact -- filtered here, at analysis time.
+_sentinel = [r for r in rows if int(r['occupancy_percent']) >= 100]
+rows = [r for r in rows if int(r['occupancy_percent']) < 100]
+if _sentinel:
+    print(f'  dropped {len(_sentinel)} sentinel 100% reading(s) (club closed)')
 dates = sorted({r['date'] for r in rows})
 # Days since the first reading -- NOT a dense 0,1,2 index. A day with no
 # readings (logger down) must stay a real gap on the axis, not be collapsed.
