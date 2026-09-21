@@ -4253,6 +4253,9 @@ date,time,weekday,club,occupancy_percent
 2026-09-20,15:25,Sun,Raudondvaris,29
 2026-09-20,15:27,Sun,Raudondvaris,29
 2026-09-20,15:37,Sun,Raudondvaris,29
+2026-09-20,15:47,Sun,Raudondvaris,29
+2026-09-20,15:58,Sun,Raudondvaris,29
+2026-09-20,16:08,Sun,Raudondvaris,28
 2026-09-20,17:10,Sun,Raudondvaris,32
 2026-09-20,17:31,Sun,Raudondvaris,33
 2026-09-20,19:31,Sun,Raudondvaris,27
@@ -4260,6 +4263,7 @@ date,time,weekday,club,occupancy_percent
 2026-09-20,20:59,Sun,Raudondvaris,19
 2026-09-20,22:04,Sun,Raudondvaris,16
 2026-09-20,22:43,Sun,Raudondvaris,15
+2026-09-20,23:15,Sun,Raudondvaris,11
 2026-09-20,23:42,Sun,Raudondvaris,9
 2026-09-21,00:36,Mon,Raudondvaris,5
 2026-09-21,01:23,Mon,Raudondvaris,3
@@ -4268,4 +4272,6 @@ date,time,weekday,club,occupancy_percent
 2026-09-21,03:28,Mon,Raudondvaris,0
 2026-09-21,04:21,Mon,Raudondvaris,1
 2026-09-21,04:43,Mon,Raudondvaris,1
+2026-09-21,07:23,Mon,Raudondvaris,20
 2026-09-21,08:25,Mon,Raudondvaris,31
+2026-09-21,08:51,Mon,Raudondvaris,36
