@@ -8024,7 +8024,12 @@ date,time,weekday,club,occupancy_percent
 2026-10-20,20:41,Tue,Raudondvaris,79
 2026-10-20,20:51,Tue,Raudondvaris,77
 2026-10-20,21:01,Tue,Raudondvaris,74
+2026-10-20,21:11,Tue,Raudondvaris,71
+2026-10-20,21:21,Tue,Raudondvaris,65
+2026-10-20,21:31,Tue,Raudondvaris,59
 2026-10-20,21:36,Tue,Raudondvaris,56
+2026-10-20,21:41,Tue,Raudondvaris,54
+2026-10-20,21:51,Tue,Raudondvaris,51
 2026-10-20,22:38,Tue,Raudondvaris,41
 2026-10-20,23:32,Tue,Raudondvaris,17
 2026-10-21,01:07,Wed,Raudondvaris,3
@@ -8033,3 +8038,4 @@ date,time,weekday,club,occupancy_percent
 2026-10-21,03:46,Wed,Raudondvaris,1
 2026-10-21,04:00,Wed,Raudondvaris,1
 2026-10-21,04:58,Wed,Raudondvaris,1
+2026-10-21,07:17,Wed,Raudondvaris,18
